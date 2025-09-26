@@ -10,4 +10,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class TripListResponce {
   private List<TripResponce> content;
+  private Integer pageNumber;
+  private Integer pageSize;
+  private Long totalElements;
+  private Integer totalPages;
+  private boolean lastPage;
 }

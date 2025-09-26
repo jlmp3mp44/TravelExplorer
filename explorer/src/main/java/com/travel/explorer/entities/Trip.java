@@ -41,7 +41,7 @@ public class Trip {
   @NotNull
   private Date endDate;
 
-  @ManyToMany(cascade = CascadeType.REMOVE)
+  @ManyToMany()
   @JoinTable(joinColumns = @JoinColumn(name = "trip_id"),
   inverseJoinColumns = @JoinColumn(name = "place_id"),
   name = "trips_places")

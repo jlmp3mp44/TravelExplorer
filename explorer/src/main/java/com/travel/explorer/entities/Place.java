@@ -35,6 +35,6 @@ public class Place {
   private String photo;
 
 
-  @ManyToMany(mappedBy = "places", cascade = CascadeType.REMOVE)
+  @ManyToMany(mappedBy = "places")
   private List<Trip> trips =  new ArrayList<>();
 }
