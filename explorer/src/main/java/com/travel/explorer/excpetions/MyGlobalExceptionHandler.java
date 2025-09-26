@@ -31,12 +31,6 @@ public class MyGlobalExceptionHandler {
     return new ResponseEntity<String>(responce, HttpStatus.NOT_FOUND);
   }
 
-  @ExceptionHandler(HttpMessageNotReadableException.class)
-  public ResponseEntity<String> myHttpMessageNotReadableException(HttpMessageNotReadableException e){
-    String responce = e.getMessage();
-    return new ResponseEntity<String>(responce, HttpStatus.BAD_REQUEST);
-  }
-
   @ExceptionHandler(APIException.class)
   public ResponseEntity<String> myAPIException(APIException e) {
     String message = e.getMessage();

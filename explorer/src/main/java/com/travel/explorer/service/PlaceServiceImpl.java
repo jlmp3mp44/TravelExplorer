@@ -14,10 +14,12 @@ public class PlaceServiceImpl implements PlaceService{
   @Autowired
   private PlaceRepo placeRepo;
 
+  @Override
   public List<Place> getAllRlaces(){
     return placeRepo.findAll();
   }
 
+  @Override
   public Place savePlace(Place place){
     Optional<Place> existingPlace = placeRepo.findByTitle(place.getTitle());
     if(existingPlace.isPresent()){

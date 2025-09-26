@@ -9,6 +9,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.Table;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.sql.Date;
 import java.util.ArrayList;
@@ -29,14 +31,14 @@ public class Trip {
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
 
-  @NonNull()
+  @NotBlank(message = "can not be blank")
   @Size(min = 3, max = 50, message = "Title must contains between 3 and 50 characters")
   private String title;
 
   private String desc;
-  @NonNull
+  @NotNull
   private Date startDate;
-  @NonNull
+  @NotNull
   private Date endDate;
 
   @ManyToMany(cascade = CascadeType.REMOVE)
