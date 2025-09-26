@@ -1,4 +1,4 @@
-package com.travel.explorer.condig;
+package com.travel.explorer.config;
 
 import org.modelmapper.ModelMapper;
 import org.springframework.context.annotation.Bean;
