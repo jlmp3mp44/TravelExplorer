@@ -1,7 +1,10 @@
 package com.travel.explorer.controller;
 
 
+import com.travel.explorer.config.AppConstants;
 import com.travel.explorer.entities.Place;
+import com.travel.explorer.payload.place.PlaceListResponse;
+import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.service.PlaceService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -27,25 +30,30 @@ public class PlaceController {
   PlaceService placeService;
 
   @GetMapping()
-  public ResponseEntity<List<Place>> getAllPlaces(){
-    return new ResponseEntity<>(placeService.getAllRlaces(), HttpStatus.OK);
+  public ResponseEntity<PlaceListResponse> getAllPlaces(
+      @RequestParam(name = "sortBy", defaultValue = AppConstants.SORT_PLACES_BY, required = false) String sortBy,
+      @RequestParam(name = "sortOrder", defaultValue = AppConstants.SORT_DIR, required = false) String sortOrder,
+      @RequestParam(name = "pageNumber", defaultValue = AppConstants.PAGE_NUMBER, required = false) Integer pageNumber,
+      @RequestParam(name = "pageSize", defaultValue = AppConstants.PAGE_SIZE, required = false) Integer pageSize
+  ){
+    return new ResponseEntity<>(placeService.getAllPlaces(sortBy, sortOrder, pageNumber, pageSize), HttpStatus.OK);
   }
 
   @PostMapping()
-  public ResponseEntity<Place> savePlace(@Valid  @RequestBody  Place place){
-    Place savedPlace = placeService.savePlace(place);
+  public ResponseEntity<PlaceResponse> savePlace(@Valid  @RequestBody  Place place){
+    PlaceResponse savedPlace = placeService.savePlace(place);
     return new ResponseEntity<>(savedPlace, HttpStatus.CREATED);
   }
 
   @DeleteMapping("{placeId}")
-  public ResponseEntity<Place> deletePlace(@PathVariable Long placeId){
-    Place deletedPlace = placeService.deletePlace(placeId);
-    return new ResponseEntity<>(deletedPlace, HttpStatus.NO_CONTENT);
+  public ResponseEntity<PlaceResponse> deletePlace(@PathVariable Long placeId){
+    PlaceResponse deletedPlace = placeService.deletePlace(placeId);
+    return new ResponseEntity<>(deletedPlace, HttpStatus.OK);
   }
 
   @PutMapping("{placeId}")
-  public ResponseEntity<Place> updatePlace(@PathVariable Long placeId, @RequestBody Place place){
-    Place updatedPlace = placeService.updatePlace(placeId, place);
+  public ResponseEntity<PlaceResponse> updatePlace(@PathVariable Long placeId, @RequestBody Place place){
+    PlaceResponse updatedPlace = placeService.updatePlace(placeId, place);
     return new ResponseEntity<>(updatedPlace, HttpStatus.OK);
   }
 

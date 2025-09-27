@@ -1,15 +1,17 @@
 package com.travel.explorer.service;
 
 import com.travel.explorer.entities.Place;
+import com.travel.explorer.payload.place.PlaceListResponse;
+import com.travel.explorer.payload.place.PlaceResponse;
 import java.util.List;
 
 public interface PlaceService {
 
-  List<Place> getAllRlaces();
+  PlaceListResponse getAllPlaces(String sortOrder, String sortBy, Integer pageNumber, Integer pageSize);
 
-  Place savePlace(Place place);
+  PlaceResponse savePlace(Place place);
 
-  Place deletePlace(Long placeId);
+  PlaceResponse deletePlace(Long placeId);
 
-  Place updatePlace(Long placeId, Place place);
+  PlaceResponse updatePlace(Long placeId, Place place);
 }
