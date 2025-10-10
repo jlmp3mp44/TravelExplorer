@@ -1,6 +1,7 @@
 package com.travel.explorer.entities;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -29,16 +30,21 @@ public class Trip {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
+  @Column(name = "trip_id")
   private Long id;
 
   @NotBlank(message = "can not be blank")
   @Size(min = 3, max = 50, message = "Title must contains between 3 and 50 characters")
+  @Column(name = "title")
   private String title;
 
+  @Column(name = "desc")
   private String desc;
   @NotNull
+  @Column(name = "start_date")
   private Date startDate;
   @NotNull
+  @Column(name = "end_date")
   private Date endDate;
 
   @ManyToMany()
