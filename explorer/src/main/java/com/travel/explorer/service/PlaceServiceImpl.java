@@ -37,10 +37,6 @@ public class PlaceServiceImpl implements PlaceService{
     Page<Place> placePage =  placeRepo.findAll(pageDetails);
     List<Place> places = placePage.getContent();
 
-    if(places.isEmpty()){
-      throw new APIException("No places created till now");
-    }
-
     List<PlaceResponse> placeResponses = places
         .stream()
         .map(place -> {
