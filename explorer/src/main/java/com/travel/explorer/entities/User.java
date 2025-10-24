@@ -34,7 +34,6 @@ import lombok.NoArgsConstructor;
 public class User {
 
   @Id
-
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   @Column(name = "user_id")
   private Long userId;
@@ -54,10 +53,18 @@ public class User {
   @Column(name = "password")
   private String password;
 
-  @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE},
+  @ManyToMany(cascade = {CascadeType.MERGE},
               fetch = FetchType.EAGER)
   @JoinTable(name = "user_roles",
   joinColumns = @JoinColumn(name = "user_id"),
   inverseJoinColumns = @JoinColumn(name = "role_id"))
   private Set<Role> roles =  new HashSet<>();
+
+  public User(String username, String email, String password, Set<Role> roles) {
+    this.email = email;
+    this.username = username;
+    this.password = password;
+    this.roles = roles;
+  }
+
 }

@@ -15,6 +15,7 @@ import java.util.HashSet;
 import java.util.Set;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 @Entity
@@ -34,6 +35,11 @@ public class Role {
   private AppRole roleName;
 
   @ManyToMany(mappedBy = "roles")
+  @EqualsAndHashCode.Exclude
   private Set<User> users = new HashSet<>();
+
+  public Role(AppRole roleName) {
+    this.roleName = roleName;
+  }
 
 }
