@@ -38,7 +38,7 @@ public class Trip {
   @Column(name = "title")
   private String title;
 
-  @Column(name = "desc")
+  @Column(name = "description")
   private String desc;
   @NotNull
   @Column(name = "start_date")

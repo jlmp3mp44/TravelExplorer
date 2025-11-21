@@ -1,4 +1,4 @@
-package com.travel.explorer.payload;
+package com.travel.explorer.payload.trip;
 
 import java.util.List;
 import lombok.AllArgsConstructor;

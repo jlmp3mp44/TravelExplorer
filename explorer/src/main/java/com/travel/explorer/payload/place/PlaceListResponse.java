@@ -1,6 +1,5 @@
 package com.travel.explorer.payload.place;
 
-import com.travel.explorer.payload.TripResponce;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;

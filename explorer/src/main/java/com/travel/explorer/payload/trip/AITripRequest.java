@@ -1,4 +1,4 @@
-package com.travel.explorer.payload;
+package com.travel.explorer.payload.trip;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -11,14 +11,12 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class TriRequest {
-  @NotBlank
-  private String title;
-  private String desc;
-  @NotNull
+public class AITripRequest {
   private Date startDate;
-  @NotNull
   private Date endDate;
-  private List<Long> placeIds;
+  private Long budget;
+  private Long numberOfDays;
+  private List<String> desiredCountries;
+  private List<String> interests;
 }
 

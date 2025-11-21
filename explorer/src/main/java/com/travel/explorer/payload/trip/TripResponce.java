@@ -1,4 +1,4 @@
-package com.travel.explorer.payload;
+package com.travel.explorer.payload.trip;
 
 import java.util.List;
 import lombok.Data;
@@ -9,5 +9,5 @@ public class TripResponce {
   private String desc;
   private String startDate;
   private String endDate;
-  private List<String> placeTitles; // тут тільки id існуючих places
+  private List<String> placeTitles;
 }

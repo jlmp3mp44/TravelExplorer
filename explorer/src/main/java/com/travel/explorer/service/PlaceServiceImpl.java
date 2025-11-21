@@ -1,11 +1,8 @@
 package com.travel.explorer.service;
 
 import com.travel.explorer.entities.Place;
-import com.travel.explorer.entities.Trip;
 import com.travel.explorer.excpetions.APIException;
 import com.travel.explorer.excpetions.ResourceNotFoundException;
-import com.travel.explorer.payload.TripListResponce;
-import com.travel.explorer.payload.TripResponce;
 import com.travel.explorer.payload.place.PlaceListResponse;
 import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.repo.PlaceRepo;
