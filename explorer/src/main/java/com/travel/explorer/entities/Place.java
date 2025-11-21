@@ -34,7 +34,7 @@ public class Place {
   @Size(min = 3, max = 50, message = "Title should contains between 3 and 50 characters")
   @Column(name = "title")
   private String title;
-  @Column(name = "desc")
+  @Column(name = "description")
   private String desc;
   @Column(name = "photo")
   private String photo;

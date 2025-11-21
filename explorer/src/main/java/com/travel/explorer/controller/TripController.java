@@ -2,9 +2,9 @@ package com.travel.explorer.controller;
 
 import com.travel.explorer.config.AppConstants;
 import com.travel.explorer.entities.Trip;
-import com.travel.explorer.payload.TriRequest;
-import com.travel.explorer.payload.TripListResponce;
-import com.travel.explorer.payload.TripResponce;
+import com.travel.explorer.payload.trip.TriRequest;
+import com.travel.explorer.payload.trip.TripListResponce;
+import com.travel.explorer.payload.trip.TripResponce;
 import com.travel.explorer.service.TripService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
