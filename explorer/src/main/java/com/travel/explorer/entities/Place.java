@@ -38,6 +38,8 @@ public class Place {
   private String desc;
   @Column(name = "photo")
   private String photo;
+  @Column(name = "rating")
+  private float rating;
 
 
   @ManyToMany(mappedBy = "places")
