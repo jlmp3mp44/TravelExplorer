@@ -77,7 +77,7 @@ public class PlaceServiceImpl implements PlaceService{
     existingPlace.setTitle(place.getTitle());
     existingPlace.setDesc(place.getDesc());
     existingPlace.setTrips(place.getTrips());
-    existingPlace.setPhoto(place.getPhoto());
+    existingPlace.setPhotoUrl(place.getPhotoUrl());
     Place savedPlace = placeRepo.save(existingPlace);
     return modelMapper.map(savedPlace, PlaceResponse.class);
   }
