@@ -14,11 +14,13 @@ import lombok.NoArgsConstructor;
 public class TriRequest {
   @NotBlank
   private String title;
-  private String desc;
   @NotNull
   private Date startDate;
   @NotNull
   private Date endDate;
-  private List<Long> placeIds;
+  private String country;
+  private String city;
+  private int budget;
+  private List<String> interests;
 }
 

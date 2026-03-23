@@ -70,15 +70,11 @@ public class TripServiceImpl implements TripService{
   public TripResponce saveTrip(TriRequest triRequest){
 
     Trip trip = modelMapper.map(triRequest, Trip.class);
-    List<Place> places = placeRepo.findAllById(triRequest.getPlaceIds());
-    if (places.size() != triRequest.getPlaceIds().size()) {
-      throw new APIException("Not all places exists");
-    }
-    trip.setPlaces(places);
+    //here should be logic of setting places
 
     tripRepo.save(trip);
     TripResponce tripResponce = modelMapper.map(trip, TripResponce.class);
-    tripResponce.setPlaceTitles(trip.getPlaces().stream().map(Place::getTitle).toList());
+    //tripResponce.setPlaceTitles(trip.getPlaces().stream().map(Place::getTitle).toList());
     return tripResponce;
   }
 

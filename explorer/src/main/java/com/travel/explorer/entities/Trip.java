@@ -15,7 +15,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.sql.Date;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -47,11 +50,27 @@ public class Trip {
   @Column(name = "end_date")
   private Date endDate;
 
+  @Column(name= "budget")
+  @NotNull
+  private Integer budget;
+
+  @ManyToMany
+  @JoinTable(
+      name = "trip_cities",
+      joinColumns = @JoinColumn(name = "trip_id"),
+      inverseJoinColumns = @JoinColumn(name = "city_id")
+  )
+  private Set<City> cities = new HashSet<>();
+
   @ManyToMany()
   @JoinTable(joinColumns = @JoinColumn(name = "trip_id"),
   inverseJoinColumns = @JoinColumn(name = "place_id"),
   name = "trips_places")
   private List<Place> places =  new ArrayList<>();
 
-
+  public Set<Country> getCountries() {
+    return cities.stream()
+        .map(City::getCountry)
+        .collect(Collectors.toSet());
+  }
 }
