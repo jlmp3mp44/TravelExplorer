@@ -1,7 +1,7 @@
 package com.travel.explorer.entities;
 
+import com.travel.explorer.entities.embeddable.Location;
 import com.travel.explorer.entities.embeddable.OpenHours;
-import com.travel.explorer.entities.embeddable.PeopleAlsoSearch;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -21,7 +21,6 @@ import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.beans.factory.parsing.Location;
 
 @Entity
 @Table(name = "places")
@@ -63,11 +62,11 @@ public class Place {
   @Embedded
   private Location location;
   @Column (name = "totalScore")
-  private int totalScore;
+  private Integer totalScore;
   @Column (name = "permanentlyClosed")
-  private boolean permanentlyClosed;
+  private Boolean permanentlyClosed;
   @Column(name = "temporarilyClosed")
-  private boolean temporarilyClosed;
+  private Boolean temporarilyClosed;
   @ElementCollection
   @CollectionTable(name = "place_open_hours", joinColumns = @JoinColumn(name = "place_id"))
   private List<OpenHours> openHours;

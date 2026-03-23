@@ -13,9 +13,4 @@ public class AppConfig {
     return new ModelMapper();
   }
 
-  @Bean
-  public String openRouterApiKey(@Value("${spring.app.OPENROUTER_API_KEY}") String key) {
-    return key;
-  }
-
 }

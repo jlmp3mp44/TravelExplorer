@@ -1,6 +1,5 @@
 package com.travel.explorer.entities;
 
-import jakarta.persistence.Embeddable;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -11,13 +10,15 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "category")
+@Table(name = "contries")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Category {
+public class Country {
+
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
+
   private String name;
 }
