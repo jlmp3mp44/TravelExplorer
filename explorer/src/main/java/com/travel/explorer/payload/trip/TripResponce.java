@@ -9,5 +9,6 @@ public class TripResponce {
   private String desc;
   private String startDate;
   private String endDate;
-  private List<String> placeTitles;
+  private List<Day> days;
 }
+

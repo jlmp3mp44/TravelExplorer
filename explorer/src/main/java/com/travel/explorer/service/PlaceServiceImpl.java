@@ -76,7 +76,6 @@ public class PlaceServiceImpl implements PlaceService{
         .orElseThrow(()-> new ResourceNotFoundException("Place", "placeId", placeId));
     existingPlace.setTitle(place.getTitle());
     existingPlace.setDesc(place.getDesc());
-    existingPlace.setTrips(place.getTrips());
     existingPlace.setPhotoUrl(place.getPhotoUrl());
     Place savedPlace = placeRepo.save(existingPlace);
     return modelMapper.map(savedPlace, PlaceResponse.class);
