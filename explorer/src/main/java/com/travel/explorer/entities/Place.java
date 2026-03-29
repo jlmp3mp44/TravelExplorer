@@ -71,6 +71,7 @@ public class Place {
   @CollectionTable(name = "place_open_hours", joinColumns = @JoinColumn(name = "place_id"))
   private List<OpenHours> openHours;
 
+
   @ManyToMany
   @JoinTable(
       name = "place_placesPeopleSearch",
@@ -81,5 +82,5 @@ public class Place {
   @Column(name = "photoUrl")
   private String photoUrl;
   @ManyToMany(mappedBy = "places")
-  private List<Trip> trips =  new ArrayList<>();
+  private List<Activity> activities =  new ArrayList<>();
 }

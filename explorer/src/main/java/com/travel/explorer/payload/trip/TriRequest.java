@@ -1,8 +1,10 @@
 package com.travel.explorer.payload.trip;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.sql.Date;
+import java.time.LocalDate;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -12,15 +14,17 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class TriRequest {
-  @NotBlank
-  private String title;
   @NotNull
-  private Date startDate;
+  @JsonFormat(pattern="yyyy-MM-dd")
+  private LocalDate startDate;
+
   @NotNull
-  private Date endDate;
+  @JsonFormat(pattern="yyyy-MM-dd")
+  private LocalDate endDate;
   private String country;
   private String city;
-  private int budget;
+  @NotNull
+  private Integer budget;
   private List<String> interests;
 }
 

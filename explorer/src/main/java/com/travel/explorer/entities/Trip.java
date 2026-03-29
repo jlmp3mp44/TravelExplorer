@@ -1,7 +1,9 @@
 package com.travel.explorer.entities;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -9,11 +11,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.sql.Date;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -22,7 +26,7 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.NonNull;
+import org.springframework.cglib.core.Local;
 
 @Entity
 @Table(name = "trips")
@@ -45,10 +49,10 @@ public class Trip {
   private String desc;
   @NotNull
   @Column(name = "start_date")
-  private Date startDate;
+  private LocalDate startDate;
   @NotNull
   @Column(name = "end_date")
-  private Date endDate;
+  private LocalDate endDate;
 
   @Column(name= "budget")
   @NotNull
@@ -62,11 +66,8 @@ public class Trip {
   )
   private Set<City> cities = new HashSet<>();
 
-  @ManyToMany()
-  @JoinTable(joinColumns = @JoinColumn(name = "trip_id"),
-  inverseJoinColumns = @JoinColumn(name = "place_id"),
-  name = "trips_places")
-  private List<Place> places =  new ArrayList<>();
+  @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
+  private List<Day> days = new ArrayList<>();
 
   public Set<Country> getCountries() {
     return cities.stream()

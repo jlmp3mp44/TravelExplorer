@@ -10,6 +10,7 @@ import com.travel.explorer.payload.trip.TripResponce;
 import com.travel.explorer.repo.PlaceRepo;
 import com.travel.explorer.repo.TripRepo;
 import java.util.List;
+import java.util.Random;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -30,6 +31,9 @@ public class TripServiceImpl implements TripService{
   @Autowired
   ModelMapper modelMapper;
 
+  @Autowired
+  Random random;
+
   @Override
   public TripListResponce getAllTrips(String sortBy, String sortOrder, Integer pageNumber, Integer pageSize) {
     Sort sortByAndOrder = sortOrder.equalsIgnoreCase("asc")
@@ -48,9 +52,6 @@ public class TripServiceImpl implements TripService{
         .stream()
         .map(trip -> {
           TripResponce resp = modelMapper.map(trip, TripResponce.class);
-          resp.setPlaceTitles(
-              trip.getPlaces().stream().map(Place::getTitle).toList()
-          );
           return resp;
         })
         .toList();
@@ -72,6 +73,7 @@ public class TripServiceImpl implements TripService{
     Trip trip = modelMapper.map(triRequest, Trip.class);
     //here should be logic of setting places
 
+    trip.setTitle(generatetripTitle());
     tripRepo.save(trip);
     TripResponce tripResponce = modelMapper.map(trip, TripResponce.class);
     //tripResponce.setPlaceTitles(trip.getPlaces().stream().map(Place::getTitle).toList());
@@ -83,7 +85,6 @@ public class TripServiceImpl implements TripService{
     Trip trip = tripRepo.findById(tripId)
         .orElseThrow(()-> new ResourceNotFoundException("Trip", "tripId", tripId));
     TripResponce tripResponce = modelMapper.map(trip, TripResponce.class);
-    tripResponce.setPlaceTitles(trip.getPlaces().stream().map(Place::getTitle).toList());
     tripRepo.deleteById(tripId);
     return tripResponce;
   }
@@ -96,10 +97,12 @@ public class TripServiceImpl implements TripService{
     existingTrip.setDesc(trip.getDesc());
     existingTrip.setStartDate(trip.getStartDate());
     existingTrip.setEndDate(trip.getEndDate());
-    existingTrip.setPlaces(trip.getPlaces());
     Trip savedTrip = tripRepo.save(existingTrip);
     TripResponce tripResponce = modelMapper.map(savedTrip, TripResponce.class);
-    tripResponce.setPlaceTitles(trip.getPlaces().stream().map(Place::getTitle).toList());
     return tripResponce;
+  }
+
+  public String generatetripTitle(){
+    return Integer.toString(random.nextInt(100, 100000));
   }
 }
