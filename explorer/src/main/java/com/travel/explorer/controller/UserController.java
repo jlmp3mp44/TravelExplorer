@@ -1,18 +1,28 @@
 package com.travel.explorer.controller;
 
+import com.travel.explorer.config.AppConstants;
+import com.travel.explorer.entities.User;
+import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.security.responce.UserInfoResponse;
 import com.travel.explorer.security.service.UserDetailsImpl;
+import com.travel.explorer.service.UserService;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api")
 public class UserController {
+
+  @Autowired
+  UserService userService;
 
   @GetMapping("/username")
   public String currentUsername(Authentication authentication){
@@ -35,6 +45,11 @@ public class UserController {
         userDetails.getUsername(), userDetails.getEmail(), roles);
 
     return ResponseEntity.ok().body(response);
+  }
+
+  @GetMapping("/admin/users")
+  public ResponseEntity<List<User>> getAllUsers(){
+    return new ResponseEntity<>(userService.getAllUsers(), HttpStatus.OK);
   }
 
 
