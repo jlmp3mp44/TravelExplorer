@@ -1,6 +1,7 @@
 package com.travel.explorer.entities;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
@@ -36,6 +37,7 @@ public class Role {
 
   @ManyToMany(mappedBy = "roles")
   @EqualsAndHashCode.Exclude
+  @JsonIgnore
   private Set<User> users = new HashSet<>();
 
   public Role(AppRole roleName) {
