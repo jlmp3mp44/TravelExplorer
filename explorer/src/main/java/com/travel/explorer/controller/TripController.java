@@ -37,6 +37,12 @@ public class TripController {
     return new ResponseEntity<>(tripService.getAllTrips(sortBy, sortOrder, pageNumber, pageSize), HttpStatus.OK);
   }
 
+  @GetMapping("{tripId}")
+  public ResponseEntity<TripResponce> getTripById(@PathVariable Long tripId){
+    TripResponce tripResponce = tripService.getTripById(tripId);
+    return new ResponseEntity<>(tripResponce, HttpStatus.OK);
+  }
+
   @PostMapping()
   public ResponseEntity<TripResponce> saveTrip(@Valid @RequestBody TriRequest triRequest){
     TripResponce savedTrip = tripService.saveTrip(triRequest);

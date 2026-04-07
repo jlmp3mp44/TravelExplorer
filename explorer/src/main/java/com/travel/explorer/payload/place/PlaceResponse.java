@@ -13,8 +13,5 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class PlaceResponse {
   private String title;
-  private String desc;
-  private String photo;
-  private List<Trip> trips =  new ArrayList<>();
 
 }

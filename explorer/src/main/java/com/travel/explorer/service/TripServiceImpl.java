@@ -1,6 +1,5 @@
 package com.travel.explorer.service;
 
-import com.travel.explorer.entities.Place;
 import com.travel.explorer.entities.Trip;
 import com.travel.explorer.excpetions.APIException;
 import com.travel.explorer.excpetions.ResourceNotFoundException;
@@ -99,6 +98,14 @@ public class TripServiceImpl implements TripService{
     existingTrip.setEndDate(trip.getEndDate());
     Trip savedTrip = tripRepo.save(existingTrip);
     TripResponce tripResponce = modelMapper.map(savedTrip, TripResponce.class);
+    return tripResponce;
+  }
+
+  @Override
+  public TripResponce getTripById(Long tripId) {
+    Trip tripFromDb = tripRepo.findById(tripId)
+        .orElseThrow(()-> new ResourceNotFoundException("Trip", "tripId", tripId));
+    TripResponce tripResponce = modelMapper.map(tripFromDb, TripResponce.class);
     return tripResponce;
   }
 

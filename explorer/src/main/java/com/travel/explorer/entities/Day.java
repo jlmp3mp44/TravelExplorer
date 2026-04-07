@@ -1,5 +1,6 @@
 package com.travel.explorer.entities;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.travel.explorer.entities.Activity;
 import com.travel.explorer.entities.Place;
 import jakarta.persistence.Column;
@@ -32,6 +33,7 @@ public class Day {
   private LocalDate date;
   @ManyToOne
   @JoinColumn(name = "trip_id", nullable = false)
+  @JsonIgnore
   private Trip trip;
   @OneToMany(mappedBy = "day")
   private List<Activity> activities = new ArrayList<>();
