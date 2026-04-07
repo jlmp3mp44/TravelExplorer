@@ -81,4 +81,9 @@ public class PlaceServiceImpl implements PlaceService{
     return modelMapper.map(savedPlace, PlaceResponse.class);
   }
 
+  @Override
+  public PlaceResponse mapPlaceToResponse(Place place){
+    return modelMapper.map(place, PlaceResponse.class);
+  }
+
 }

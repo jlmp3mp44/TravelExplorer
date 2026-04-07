@@ -14,4 +14,6 @@ public interface TripService {
   TripResponce deleteTrip(Long tripId);
 
   TripResponce updateTrip(Long tripId, Trip trip);
+
+  TripResponce getTripById(Long tripId);
 }

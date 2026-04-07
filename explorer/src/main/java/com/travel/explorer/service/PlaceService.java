@@ -14,4 +14,6 @@ public interface PlaceService {
   PlaceResponse deletePlace(Long placeId);
 
   PlaceResponse updatePlace(Long placeId, Place place);
+
+  PlaceResponse mapPlaceToResponse(Place place);
 }
