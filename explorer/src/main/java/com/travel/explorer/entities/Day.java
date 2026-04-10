@@ -3,6 +3,7 @@ package com.travel.explorer.entities;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.travel.explorer.entities.Activity;
 import com.travel.explorer.entities.Place;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.Entity;
@@ -35,7 +36,7 @@ public class Day {
   @JoinColumn(name = "trip_id", nullable = false)
   @JsonIgnore
   private Trip trip;
-  @OneToMany(mappedBy = "day")
+  @OneToMany(mappedBy = "day", cascade = CascadeType.ALL, orphanRemoval = true)
   private List<Activity> activities = new ArrayList<>();
 
 }

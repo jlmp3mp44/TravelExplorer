@@ -31,7 +31,7 @@ public class Activity {
   @JoinColumn(name = "day_id")
   private Day day;
   @ManyToMany()
-  @JoinTable(joinColumns = @JoinColumn(name = "trip_id"),
+  @JoinTable(joinColumns = @JoinColumn(name = "activity_id"),
       inverseJoinColumns = @JoinColumn(name = "place_id"),
       name = "activity_places")
   private List<Place> places =  new ArrayList<>();
