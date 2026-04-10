@@ -7,6 +7,8 @@ import com.travel.explorer.entities.Trip;
 import com.travel.explorer.excpetions.APIException;
 import com.travel.explorer.excpetions.ResourceNotFoundException;
 import com.travel.explorer.google.GooglePlaceService;
+import com.travel.explorer.google.geocode.GoogleGeocodingService;
+import com.travel.explorer.google.geocode.LatLng;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
@@ -41,6 +43,9 @@ public class TripServiceImpl implements TripService{
   @Autowired
   private GooglePlaceService googlePlaceService;
 
+  @Autowired
+  private GoogleGeocodingService googleGeocodingService;
+
   @Override
   public TripListResponce getAllTrips(String sortBy, String sortOrder, Integer pageNumber, Integer pageSize) {
     Sort sortByAndOrder = sortOrder.equalsIgnoreCase("asc")
@@ -64,6 +69,7 @@ public class TripServiceImpl implements TripService{
         .toList();
 
     TripListResponce tripListResponce = new TripListResponce();
+    
     tripListResponce.setContent(tripResponses);
     tripListResponce.setPageNumber(tripPage.getNumber());
     tripListResponce.setPageSize(tripPage.getSize());
@@ -80,47 +86,36 @@ public class TripServiceImpl implements TripService{
 
     Trip trip = modelMapper.map(triRequest, Trip.class);
 
-    // 1. Мокаємо координати (Париж)
-    double mockedLat = 48.8566;
-    double mockedLng = 2.3522;
+    String geocodeAddress = buildGeocodeAddress(triRequest);
+    LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
     double radius = 10000.0;
 
-    // 2. Отримуємо місця з Google
-    List<Place> generatedPlaces = googlePlaceService.searchNearby(mockedLat, mockedLng, radius);
+    List<Place> generatedPlaces = googlePlaceService.searchNearby(
+        center.latitude(), center.longitude(), radius);
 
-    // Перевіряємо, чи Google взагалі щось повернув
     if (generatedPlaces != null && !generatedPlaces.isEmpty()) {
 
-      // БЕРЕМО ЛИШЕ 1 ПЛЕЙС
       Place firstPlace = generatedPlaces.get(0);
 
-      // Зберігаємо місце в базу, щоб воно отримало ID для зв'язку ManyToMany
       firstPlace = placeRepo.save(firstPlace);
 
-      // 3. Створюємо 1 День (беремо дату початку подорожі)
       Day day = new Day();
       day.setDate(trip.getStartDate());
       day.setTrip(trip); // Зв'язуємо з Trip
 
-      // 4. Створюємо 1 Активність
       Activity activity = new Activity();
       activity.setDay(day); // Зв'язуємо з Day
       activity.setPlaces(List.of(firstPlace)); // Додаємо наш 1 плейс
 
-      // Додаємо активність у день
       day.getActivities().add(activity);
 
-      // Додаємо день у подорож
       trip.getDays().add(day);
     }
 
-    // 5. Генеруємо тайтл та зберігаємо всю конструкцію
     trip.setTitle(generatetripTitle());
 
-    // Зберігаємо Trip (завдяки cascade збережуться і Day, і Activity)
     tripRepo.save(trip);
 
-    // 6. Формуємо відповідь клієнту
     TripResponce tripResponce = modelMapper.map(trip, TripResponce.class);
 
     return tripResponce;
@@ -158,5 +153,18 @@ public class TripServiceImpl implements TripService{
 
   public String generatetripTitle(){
     return Integer.toString(random.nextInt(100, 100000));
+  }
+
+  private static String buildGeocodeAddress(TriRequest triRequest) {
+    String cityPart = triRequest.getCity() != null ? triRequest.getCity().trim() : "";
+    String countryPart =
+        triRequest.getCountry() != null ? triRequest.getCountry().trim() : "";
+    if (!cityPart.isEmpty() && !countryPart.isEmpty()) {
+      return cityPart + ", " + countryPart;
+    }
+    if (!countryPart.isEmpty()) {
+      return countryPart;
+    }
+    return cityPart;
   }
 }

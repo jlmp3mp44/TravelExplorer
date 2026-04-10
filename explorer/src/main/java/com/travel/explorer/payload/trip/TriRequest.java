@@ -1,9 +1,8 @@
 package com.travel.explorer.payload.trip;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
-import java.sql.Date;
 import java.time.LocalDate;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -26,5 +25,12 @@ public class TriRequest {
   @NotNull
   private Integer budget;
   private List<String> interests;
+
+  @AssertTrue(message = "Either country or city must be provided")
+  public boolean isLocationProvided() {
+    boolean hasCountry = country != null && !country.trim().isEmpty();
+    boolean hasCity = city != null && !city.trim().isEmpty();
+    return hasCountry || hasCity;
+  }
 }
 

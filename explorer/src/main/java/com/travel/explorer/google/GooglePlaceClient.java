@@ -15,7 +15,6 @@ public class GooglePlaceClient {
   private final RestTemplate restTemplate;
   private final String baseUrl = "https://places.googleapis.com/v1/places:searchNearby";
 
-  // Інжектимо RestTemplateBuilder та беремо ключ
   public GooglePlaceClient(@Value("${google.api.key}") String apiKey, RestTemplateBuilder builder) {
     this.apiKey = apiKey;
     this.restTemplate = builder.build();
@@ -27,10 +26,8 @@ public class GooglePlaceClient {
     headers.set("X-Goog-Api-Key", apiKey);
     headers.set("X-Goog-FieldMask", "places.displayName,places.formattedAddress");
 
-    // Spring автоматично перетворить requestBody у правильний JSON
     HttpEntity<SearchNearbyRequest> entity = new HttpEntity<>(requestBody, headers);
 
-    // Очікуємо одразу готовий об'єкт GooglePlacesResponse замість String
     ResponseEntity<GooglePlacesResponse> response = restTemplate.exchange(
         baseUrl,
         HttpMethod.POST,

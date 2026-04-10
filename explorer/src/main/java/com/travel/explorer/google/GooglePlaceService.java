@@ -18,18 +18,17 @@ public class GooglePlaceService {
   private final GooglePlaceClient client;
   private final GooglePlaceMapper mapper;
 
-  // Інжектимо і клієнт, і мапер
   public GooglePlaceService(GooglePlaceClient client, GooglePlaceMapper mapper) {
     this.client = client;
     this.mapper = mapper;
   }
 
-  // Тепер метод повертає List<Place> (ваші внутрішні Entity/Моделі)
   public List<Place> searchNearby(double latitude, double longitude, double radius) {
     SearchNearbyRequest request = new SearchNearbyRequest(
         new LocationRestriction(
             new Circle(new Center(latitude, longitude), radius)
-        )
+        ),
+        1
     );
 
     GooglePlacesResponse response = client.searchNearby(request);
@@ -38,7 +37,6 @@ public class GooglePlaceService {
       return Collections.emptyList();
     }
 
-    // Мапимо DTO від Google у ваші сутності одразу тут
     return response.getPlaces().stream()
         .map(mapper::toPlace)
         .collect(Collectors.toList());
