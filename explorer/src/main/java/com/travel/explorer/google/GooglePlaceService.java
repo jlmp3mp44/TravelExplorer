@@ -6,7 +6,6 @@ import com.travel.explorer.google.request.Circle;
 import com.travel.explorer.google.request.LocationRestriction;
 import com.travel.explorer.google.request.SearchNearbyRequest;
 import com.travel.explorer.google.response.GooglePlacesResponse;
-import com.travel.explorer.payload.place.GooglePlaceDto;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -28,7 +27,7 @@ public class GooglePlaceService {
         new LocationRestriction(
             new Circle(new Center(latitude, longitude), radius)
         ),
-        1
+        20
     );
 
     GooglePlacesResponse response = client.searchNearby(request);
