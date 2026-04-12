@@ -15,6 +15,8 @@ import com.travel.explorer.payload.trip.TripResponce;
 import com.travel.explorer.repo.PlaceRepo;
 import com.travel.explorer.repo.TripRepo;
 import jakarta.transaction.Transactional;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import org.modelmapper.ModelMapper;
@@ -27,6 +29,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class TripServiceImpl implements TripService{
+
+  private static final int ACTIVITIES_PER_DAY = 3;
 
   @Autowired
   private TripRepo tripRepo;
@@ -94,22 +98,29 @@ public class TripServiceImpl implements TripService{
         center.latitude(), center.longitude(), radius);
 
     if (generatedPlaces != null && !generatedPlaces.isEmpty()) {
+      List<Place> savedPlaces = new ArrayList<>();
+      for (Place place : generatedPlaces) {
+        savedPlaces.add(placeRepo.save(place));
+      }
 
-      Place firstPlace = generatedPlaces.get(0);
+      int placeIndex = 0;
+      for (LocalDate d = trip.getStartDate(); !d.isAfter(trip.getEndDate()); d = d.plusDays(1)) {
+        Day day = new Day();
+        day.setDate(d);
+        day.setTrip(trip);
 
-      firstPlace = placeRepo.save(firstPlace);
+        for (int i = 0; i < ACTIVITIES_PER_DAY; i++) {
+          Place place = savedPlaces.get(placeIndex % savedPlaces.size());
+          placeIndex++;
 
-      Day day = new Day();
-      day.setDate(trip.getStartDate());
-      day.setTrip(trip); // Зв'язуємо з Trip
+          Activity activity = new Activity();
+          activity.setDay(day);
+          activity.setPlaces(List.of(place));
+          day.getActivities().add(activity);
+        }
 
-      Activity activity = new Activity();
-      activity.setDay(day); // Зв'язуємо з Day
-      activity.setPlaces(List.of(firstPlace)); // Додаємо наш 1 плейс
-
-      day.getActivities().add(activity);
-
-      trip.getDays().add(day);
+        trip.getDays().add(day);
+      }
     }
 
     trip.setTitle(generatetripTitle());
