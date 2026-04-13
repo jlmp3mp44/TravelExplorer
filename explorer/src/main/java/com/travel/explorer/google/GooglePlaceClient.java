@@ -24,7 +24,9 @@ public class GooglePlaceClient {
     HttpHeaders headers = new HttpHeaders();
     headers.setContentType(MediaType.APPLICATION_JSON);
     headers.set("X-Goog-Api-Key", apiKey);
-    headers.set("X-Goog-FieldMask", "places.displayName,places.formattedAddress");
+    headers.set(
+        "X-Goog-FieldMask",
+        "places.displayName,places.formattedAddress,places.types");
 
     HttpEntity<SearchNearbyRequest> entity = new HttpEntity<>(requestBody, headers);
 
