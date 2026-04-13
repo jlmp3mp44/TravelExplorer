@@ -1,6 +1,7 @@
 package com.travel.explorer.service;
 
 import com.travel.explorer.entities.Activity;
+import com.travel.explorer.entities.City;
 import com.travel.explorer.entities.Day;
 import com.travel.explorer.entities.Place;
 import com.travel.explorer.entities.Trip;
@@ -12,13 +13,19 @@ import com.travel.explorer.google.geocode.LatLng;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
+import com.travel.explorer.repo.CityRepository;
 import com.travel.explorer.repo.PlaceRepo;
 import com.travel.explorer.repo.TripRepo;
 import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -34,6 +41,9 @@ public class TripServiceImpl implements TripService{
 
   @Autowired
   private TripRepo tripRepo;
+
+  @Autowired
+  private CityRepository cityRepository;
 
   @Autowired
   private PlaceRepo placeRepo;
@@ -90,7 +100,23 @@ public class TripServiceImpl implements TripService{
 
     Trip trip = modelMapper.map(triRequest, Trip.class);
 
-    String geocodeAddress = buildGeocodeAddress(triRequest);
+    String geocodeAddress;
+    if (triRequest.getCityIds() != null
+        && triRequest.getCityIds().stream().anyMatch(Objects::nonNull)) {
+      List<Long> nonNullIds =
+          triRequest.getCityIds().stream().filter(Objects::nonNull).toList();
+      Set<Long> uniqueIds = new HashSet<>(nonNullIds);
+      List<City> loaded = cityRepository.findAllByIdInWithCountry(uniqueIds);
+      if (loaded.size() != uniqueIds.size()) {
+        throw new APIException("One or more cities not found");
+      }
+      Map<Long, City> byId = loaded.stream().collect(Collectors.toMap(City::getId, c -> c));
+      City primary = byId.get(nonNullIds.get(0));
+      trip.setCities(new HashSet<>(loaded));
+      geocodeAddress = buildGeocodeAddressFromCity(primary);
+    } else {
+      geocodeAddress = buildGeocodeAddress(triRequest);
+    }
     LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
     double radius = 10000.0;
 
@@ -170,6 +196,21 @@ public class TripServiceImpl implements TripService{
     String cityPart = triRequest.getCity() != null ? triRequest.getCity().trim() : "";
     String countryPart =
         triRequest.getCountry() != null ? triRequest.getCountry().trim() : "";
+    if (!cityPart.isEmpty() && !countryPart.isEmpty()) {
+      return cityPart + ", " + countryPart;
+    }
+    if (!countryPart.isEmpty()) {
+      return countryPart;
+    }
+    return cityPart;
+  }
+
+  private static String buildGeocodeAddressFromCity(City city) {
+    String cityPart = city.getName() != null ? city.getName().trim() : "";
+    String countryPart =
+        city.getCountry() != null && city.getCountry().getName() != null
+            ? city.getCountry().getName().trim()
+            : "";
     if (!cityPart.isEmpty() && !countryPart.isEmpty()) {
       return cityPart + ", " + countryPart;
     }
