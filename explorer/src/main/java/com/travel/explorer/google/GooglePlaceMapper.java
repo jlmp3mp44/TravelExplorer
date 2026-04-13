@@ -10,20 +10,24 @@ import org.springframework.stereotype.Service;
 public class GooglePlaceMapper {
 
   private final ModelMapper modelMapper;
+  private final CategoryResolutionService categoryResolutionService;
 
-  public GooglePlaceMapper() {
-    this.modelMapper = new ModelMapper();
-
-    modelMapper.addMappings(new PropertyMap<GooglePlaceDto, Place>() {
-      @Override
-      protected void configure() {
-        map().setTitle(source.getDisplayName().getText());
-        map().setAddress(source.getFormattedAddress());
-      }
-    });
+  public GooglePlaceMapper(ModelMapper modelMapper, CategoryResolutionService categoryResolutionService) {
+    this.modelMapper = modelMapper;
+    this.categoryResolutionService = categoryResolutionService;
+    modelMapper.addMappings(
+        new PropertyMap<GooglePlaceDto, Place>() {
+          @Override
+          protected void configure() {
+            map().setTitle(source.getDisplayName().getText());
+            map().setAddress(source.getFormattedAddress());
+          }
+        });
   }
 
   public Place toPlace(GooglePlaceDto dto) {
-    return modelMapper.map(dto, Place.class);
+    Place place = modelMapper.map(dto, Place.class);
+    place.setCategories(categoryResolutionService.resolveFromGoogleTypes(dto.getTypes()));
+    return place;
   }
 }
