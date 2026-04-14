@@ -34,6 +34,10 @@ public class Place {
   @Column(name = "place_id")
   private Long id;
 
+  /** Google Places API short id (for dedup / reference). */
+  @Column(name = "google_place_id", length = 256)
+  private String googlePlaceId;
+
   @NotBlank(message = "can not be blank")
   @Size(min = 3, max = 50, message = "Title should contains between 3 and 50 characters")
   @Column(name = "title")

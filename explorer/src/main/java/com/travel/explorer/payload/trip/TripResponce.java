@@ -16,6 +16,8 @@ public class TripResponce {
   private String desc;
   private String startDate;
   private String endDate;
+  /** Google Places type codes selected for this trip */
+  private List<String> categories;
   private List<DayResponse> days;
 }
 

@@ -27,6 +27,7 @@ public class GooglePlaceMapper {
 
   public Place toPlace(GooglePlaceDto dto) {
     Place place = modelMapper.map(dto, Place.class);
+    place.setGooglePlaceId(dto.getGooglePlaceId());
     place.setCategories(categoryResolutionService.resolveFromGoogleTypes(dto.getTypes()));
     return place;
   }

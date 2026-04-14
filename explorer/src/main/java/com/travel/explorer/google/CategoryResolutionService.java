@@ -1,6 +1,7 @@
 package com.travel.explorer.google;
 
 import com.travel.explorer.entities.Category;
+import com.travel.explorer.place.PlaceInterestType;
 import com.travel.explorer.repo.CategoryRepository;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -28,7 +29,7 @@ public class CategoryResolutionService {
     for (String t : types) {
       if (t != null) {
         String trimmed = t.trim();
-        if (!trimmed.isEmpty()) {
+        if (!trimmed.isEmpty() && PlaceInterestType.isAllowedCode(trimmed)) {
           unique.add(trimmed);
         }
       }
