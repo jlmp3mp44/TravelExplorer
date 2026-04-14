@@ -20,6 +20,7 @@ import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -99,6 +100,8 @@ public class TripServiceImpl implements TripService{
   public TripResponce saveTrip(TriRequest triRequest) {
 
     Trip trip = modelMapper.map(triRequest, Trip.class);
+    trip.setCategories(
+        triRequest.getCategories().stream().map(String::trim).distinct().toList());
 
     String geocodeAddress;
     if (triRequest.getCityIds() != null
@@ -120,8 +123,10 @@ public class TripServiceImpl implements TripService{
     LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
     double radius = 10000.0;
 
-    List<Place> generatedPlaces = googlePlaceService.searchNearby(
-        center.latitude(), center.longitude(), radius);
+    List<String> searchTypes = new ArrayList<>(new LinkedHashSet<>(trip.getCategories()));
+    List<Place> generatedPlaces =
+        googlePlaceService.searchNearby(
+            center.latitude(), center.longitude(), radius, searchTypes);
 
     if (generatedPlaces != null && !generatedPlaces.isEmpty()) {
       List<Place> savedPlaces = new ArrayList<>();
