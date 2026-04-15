@@ -1,7 +1,7 @@
 package com.travel.explorer.entities;
 
-import com.travel.explorer.entities.embeddable.Location;
 import com.travel.explorer.entities.embeddable.OpenHours;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -63,7 +64,8 @@ public class Place {
   private String state;
   @Column(name = "phone")
   private String phone;
-  @Embedded
+  @OneToOne(cascade = CascadeType.ALL)
+  @JoinColumn(name = "location_id", referencedColumnName = "id")
   private Location location;
   @Column (name = "totalScore")
   private Integer totalScore;
