@@ -61,6 +61,9 @@ public class TripServiceImpl implements TripService{
   @Autowired
   private GoogleGeocodingService googleGeocodingService;
 
+  @Autowired
+  private PlaceRecommendationService placeRecommendationService;
+
   @Override
   public TripListResponce getAllTrips(String sortBy, String sortOrder, Integer pageNumber, Integer pageSize) {
     Sort sortByAndOrder = sortOrder.equalsIgnoreCase("asc")
@@ -127,10 +130,11 @@ public class TripServiceImpl implements TripService{
     List<Place> generatedPlaces =
         googlePlaceService.searchNearby(
             center.latitude(), center.longitude(), radius, searchTypes);
+    List<Place> recommendedPlaces = placeRecommendationService.rankPlaces(generatedPlaces, searchTypes);
 
-    if (generatedPlaces != null && !generatedPlaces.isEmpty()) {
+    if (!recommendedPlaces.isEmpty()) {
       List<Place> savedPlaces = new ArrayList<>();
-      for (Place place : generatedPlaces) {
+      for (Place place : recommendedPlaces) {
         savedPlaces.add(placeRepo.save(place));
       }
 

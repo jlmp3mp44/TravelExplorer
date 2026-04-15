@@ -54,6 +54,14 @@ public class Place {
   private List<Category> categories;
   @Column(name = "address")
   private String address;
+  @Column(name = "primaryType")
+  private String primaryType;
+  @Column(name = "businessStatus")
+  private String businessStatus;
+  @Column(name = "rating")
+  private Double rating;
+  @Column(name = "userRatingCount")
+  private Integer userRatingCount;
   @Column(name = "neighborhood")
   private String neighborhood;
   @Column(name = "city")

@@ -20,4 +20,8 @@ public class GooglePlaceDto {
   private List<String> types;
   /** Google Places LatLng ({@code latitude} / {@code longitude}). */
   private Center location;
+  private String primaryType;
+  private Double rating;
+  private Integer userRatingCount;
+  private String businessStatus;
 }
