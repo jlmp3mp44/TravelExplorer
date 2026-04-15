@@ -3,6 +3,7 @@ package com.travel.explorer.google;
 import com.travel.explorer.entities.Location;
 import com.travel.explorer.entities.Place;
 import com.travel.explorer.payload.place.GooglePlaceDto;
+import java.util.Locale;
 import org.modelmapper.ModelMapper;
 import org.modelmapper.PropertyMap;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,10 @@ public class GooglePlaceMapper {
           protected void configure() {
             map().setTitle(source.getDisplayName().getText());
             map().setAddress(source.getFormattedAddress());
+            map().setPrimaryType(source.getPrimaryType());
+            map().setBusinessStatus(source.getBusinessStatus());
+            map().setRating(source.getRating());
+            map().setUserRatingCount(source.getUserRatingCount());
           }
         });
   }
@@ -36,6 +41,12 @@ public class GooglePlaceMapper {
       place.setLocation(location);
     }
     place.setCategories(categoryResolutionService.resolveFromGoogleTypes(dto.getTypes()));
+    place.setPermanentlyClosed(isBusinessStatus(dto.getBusinessStatus(), "CLOSED_PERMANENTLY"));
+    place.setTemporarilyClosed(isBusinessStatus(dto.getBusinessStatus(), "CLOSED_TEMPORARILY"));
     return place;
+  }
+
+  private static boolean isBusinessStatus(String status, String expected) {
+    return status != null && expected.equals(status.trim().toUpperCase(Locale.ROOT));
   }
 }
