@@ -3,6 +3,7 @@ package com.travel.explorer.controller;
 import com.travel.explorer.config.AppConstants;
 import com.travel.explorer.entities.Trip;
 import com.travel.explorer.payload.rating.RatingRequest;
+import com.travel.explorer.payload.trip.ReplaceActivityRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
@@ -44,8 +45,9 @@ public class TripController {
   }
 
   @GetMapping("{tripId}")
-  public ResponseEntity<TripResponce> getTripById(@PathVariable Long tripId){
-    TripResponce tripResponce = tripService.getTripById(tripId);
+  public ResponseEntity<TripResponce> getTripById(
+      @PathVariable Long tripId, @RequestParam(required = false) Long userId) {
+    TripResponce tripResponce = tripService.getTripById(tripId, userId);
     return new ResponseEntity<>(tripResponce, HttpStatus.OK);
   }
 
@@ -78,8 +80,10 @@ public class TripController {
 
   @PostMapping("{tripId}/activities/{activityId}/replace")
   public ResponseEntity<TripResponce> replaceActivityWithMockPlace(
-      @PathVariable Long tripId, @PathVariable Long activityId) {
-    TripResponce updated = tripService.replaceActivityWithMockPlace(tripId, activityId);
+      @PathVariable Long tripId,
+      @PathVariable Long activityId,
+      @Valid @RequestBody ReplaceActivityRequest request) {
+    TripResponce updated = tripService.replaceActivityWithMockPlace(tripId, activityId, request);
     return new ResponseEntity<>(updated, HttpStatus.OK);
   }
 

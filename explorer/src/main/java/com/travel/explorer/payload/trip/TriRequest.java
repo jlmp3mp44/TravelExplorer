@@ -37,5 +37,8 @@ public class TriRequest {
   @ValidPlaceInterestCodes
   @JsonAlias("interests")
   private List<String> categories;
+
+  /** Defaults to true when omitted. */
+  private Boolean isPublic;
 }
 

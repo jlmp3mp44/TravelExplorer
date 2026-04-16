@@ -15,6 +15,9 @@ public class ActivityResponse {
 
   private Long id;
 
+  /** Present on GET trip when {@code userId} is passed and this user customized the activity. */
+  private ActivityUserPreferenceResponse userPreference;
+
   private List<PlaceResponse> places = new ArrayList<>();
   private LocalDateTime startTime;
   private LocalDateTime endTime;

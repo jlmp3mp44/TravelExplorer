@@ -5,11 +5,18 @@ import com.travel.explorer.entities.City;
 import com.travel.explorer.entities.Day;
 import com.travel.explorer.entities.Place;
 import com.travel.explorer.entities.Trip;
+import com.travel.explorer.entities.User;
+import com.travel.explorer.entities.UserActivityPreference;
 import com.travel.explorer.excpetions.APIException;
 import com.travel.explorer.excpetions.ResourceNotFoundException;
 import com.travel.explorer.google.GooglePlaceService;
 import com.travel.explorer.google.geocode.GoogleGeocodingService;
 import com.travel.explorer.google.geocode.LatLng;
+import com.travel.explorer.payload.ActivityResponse;
+import com.travel.explorer.payload.ActivityUserPreferenceResponse;
+import com.travel.explorer.payload.DayResponse;
+import com.travel.explorer.payload.place.PlaceResponse;
+import com.travel.explorer.payload.trip.ReplaceActivityRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
@@ -18,6 +25,8 @@ import com.travel.explorer.repo.CityRepository;
 import com.travel.explorer.repo.DayRepository;
 import com.travel.explorer.repo.PlaceRepo;
 import com.travel.explorer.repo.TripRepo;
+import com.travel.explorer.repo.UserActivityPreferenceRepository;
+import com.travel.explorer.repo.UserRepository;
 import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -59,6 +68,12 @@ public class TripServiceImpl implements TripService{
 
   @Autowired
   private RatingService ratingService;
+
+  @Autowired
+  private UserRepository userRepository;
+
+  @Autowired
+  private UserActivityPreferenceRepository userActivityPreferenceRepository;
 
   @Autowired
   ModelMapper modelMapper;
@@ -113,6 +128,9 @@ public class TripServiceImpl implements TripService{
     Trip trip = modelMapper.map(triRequest, Trip.class);
     trip.setCategories(
         triRequest.getCategories().stream().map(String::trim).distinct().toList());
+    if (trip.getIsPublic() == null) {
+      trip.setIsPublic(true);
+    }
 
     String geocodeAddress;
     if (triRequest.getCityIds() != null
@@ -192,17 +210,21 @@ public class TripServiceImpl implements TripService{
     existingTrip.setDesc(trip.getDesc());
     existingTrip.setStartDate(trip.getStartDate());
     existingTrip.setEndDate(trip.getEndDate());
+    if (trip.getIsPublic() != null) {
+      existingTrip.setIsPublic(trip.getIsPublic());
+    }
     Trip savedTrip = tripRepo.save(existingTrip);
     TripResponce tripResponce = modelMapper.map(savedTrip, TripResponce.class);
     return tripResponce;
   }
 
   @Override
-  public TripResponce getTripById(Long tripId) {
+  public TripResponce getTripById(Long tripId, Long userId) {
     Trip tripFromDb = tripRepo.findById(tripId)
         .orElseThrow(()-> new ResourceNotFoundException("Trip", "tripId", tripId));
     TripResponce tripResponce = modelMapper.map(tripFromDb, TripResponce.class);
     ratingService.attachRatingSummaries(tripResponce);
+    attachUserActivityPreferences(tripResponce, userId);
     return tripResponce;
   }
 
@@ -247,7 +269,8 @@ public class TripServiceImpl implements TripService{
 
   @Override
   @Transactional
-  public TripResponce replaceActivityWithMockPlace(Long tripId, Long activityId) {
+  public TripResponce replaceActivityWithMockPlace(
+      Long tripId, Long activityId, ReplaceActivityRequest request) {
     Activity activity =
         activityRepository
             .findById(activityId)
@@ -258,6 +281,11 @@ public class TripServiceImpl implements TripService{
       throw new APIException("Activity does not belong to this trip");
     }
 
+    User user =
+        userRepository
+            .findById(request.getUserId())
+            .orElseThrow(() -> new ResourceNotFoundException("User", "userId", request.getUserId()));
+
     Page<Place> placePage = placeRepo.findAll(PageRequest.of(0, 1));
     if (placePage.isEmpty()) {
       throw new APIException(
@@ -265,16 +293,62 @@ public class TripServiceImpl implements TripService{
     }
     Place mockPlace = placePage.getContent().get(0);
 
-    activity.setPlaces(new ArrayList<>(List.of(mockPlace)));
-    activityRepository.save(activity);
+    UserActivityPreference pref =
+        userActivityPreferenceRepository
+            .findByUser_UserIdAndActivity_Id(request.getUserId(), activityId)
+            .orElseGet(
+                () -> {
+                  UserActivityPreference p = new UserActivityPreference();
+                  p.setUser(user);
+                  p.setActivity(activity);
+                  return p;
+                });
+    pref.setChangeReason(request.getReason());
+    pref.setReplacementPlace(mockPlace);
+    userActivityPreferenceRepository.save(pref);
 
-    Trip trip =
-        tripRepo
-            .findById(tripId)
-            .orElseThrow(() -> new ResourceNotFoundException("Trip", "tripId", tripId));
-    TripResponce tripResponce = modelMapper.map(trip, TripResponce.class);
-    ratingService.attachRatingSummaries(tripResponce);
-    return tripResponce;
+    return getTripById(tripId, request.getUserId());
+  }
+
+  private void attachUserActivityPreferences(TripResponce tripResponce, Long userId) {
+    if (userId == null || tripResponce.getDays() == null) {
+      return;
+    }
+    List<Long> activityIds = new ArrayList<>();
+    for (DayResponse day : tripResponce.getDays()) {
+      if (day.getActivities() == null) {
+        continue;
+      }
+      for (ActivityResponse a : day.getActivities()) {
+        if (a.getId() != null) {
+          activityIds.add(a.getId());
+        }
+      }
+    }
+    if (activityIds.isEmpty()) {
+      return;
+    }
+    List<UserActivityPreference> prefs =
+        userActivityPreferenceRepository.findForUserAndActivities(userId, activityIds);
+    Map<Long, UserActivityPreference> byActivityId =
+        prefs.stream()
+            .collect(Collectors.toMap(p -> p.getActivity().getId(), p -> p, (x, y) -> x));
+    for (DayResponse day : tripResponce.getDays()) {
+      if (day.getActivities() == null) {
+        continue;
+      }
+      for (ActivityResponse a : day.getActivities()) {
+        UserActivityPreference pref = byActivityId.get(a.getId());
+        if (pref == null) {
+          continue;
+        }
+        ActivityUserPreferenceResponse u = new ActivityUserPreferenceResponse();
+        u.setReason(pref.getChangeReason());
+        u.setReplacementPlaces(
+            List.of(modelMapper.map(pref.getReplacementPlace(), PlaceResponse.class)));
+        a.setUserPreference(u);
+      }
+    }
   }
 
   public String generatetripTitle(){
