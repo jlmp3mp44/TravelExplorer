@@ -1,41 +1,40 @@
 package com.travel.explorer.entities;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.travel.explorer.entities.Activity;
-import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "days")
+@Table(
+    name = "trip_ratings",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "trip_id"}))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Day {
+public class TripRating {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
-  private Integer id;
-  private LocalDate date;
-  @ManyToOne
-  @JoinColumn(name = "trip_id", nullable = false)
-  @JsonIgnore
-  private Trip trip;
-  @OneToMany(mappedBy = "day", cascade = CascadeType.ALL, orphanRemoval = true)
-  @OrderBy("sortOrder ASC")
-  private List<Activity> activities = new ArrayList<>();
+  private Long id;
 
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "user_id", nullable = false)
+  private User user;
+
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "trip_id", nullable = false)
+  private Trip trip;
+
+  @Column(nullable = false)
+  private Integer stars;
 }

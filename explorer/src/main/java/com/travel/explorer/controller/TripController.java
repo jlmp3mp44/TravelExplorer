@@ -2,11 +2,14 @@ package com.travel.explorer.controller;
 
 import com.travel.explorer.config.AppConstants;
 import com.travel.explorer.entities.Trip;
+import com.travel.explorer.payload.rating.RatingRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
+import com.travel.explorer.service.RatingService;
 import com.travel.explorer.service.TripService;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +29,9 @@ public class TripController {
 
   @Autowired
   TripService tripService;
+
+  @Autowired
+  RatingService ratingService;
 
   @GetMapping()
   public ResponseEntity<TripListResponce> getAllTrips(
@@ -59,6 +65,38 @@ public class TripController {
   public ResponseEntity<TripResponce> updateTrip(@PathVariable Long tripId, @RequestBody Trip trip){
     TripResponce updatedTrip = tripService.updateTrip(tripId, trip);
     return new ResponseEntity<>(updatedTrip, HttpStatus.OK);
+  }
+
+  @PutMapping("{tripId}/days/{dayId}/activities/order")
+  public ResponseEntity<TripResponce> reorderDayActivities(
+      @PathVariable Long tripId,
+      @PathVariable Integer dayId,
+      @RequestBody List<Long> orderedActivityIds) {
+    TripResponce updated = tripService.reorderDayActivities(tripId, dayId, orderedActivityIds);
+    return new ResponseEntity<>(updated, HttpStatus.OK);
+  }
+
+  @PostMapping("{tripId}/activities/{activityId}/replace")
+  public ResponseEntity<TripResponce> replaceActivityWithMockPlace(
+      @PathVariable Long tripId, @PathVariable Long activityId) {
+    TripResponce updated = tripService.replaceActivityWithMockPlace(tripId, activityId);
+    return new ResponseEntity<>(updated, HttpStatus.OK);
+  }
+
+  @PostMapping("{tripId}/ratings")
+  public ResponseEntity<Void> rateTrip(
+      @PathVariable Long tripId, @Valid @RequestBody RatingRequest request) {
+    ratingService.rateTrip(tripId, request.getUserId(), request.getStars());
+    return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+  }
+
+  @PostMapping("{tripId}/activities/{activityId}/ratings")
+  public ResponseEntity<Void> rateActivity(
+      @PathVariable Long tripId,
+      @PathVariable Long activityId,
+      @Valid @RequestBody RatingRequest request) {
+    ratingService.rateActivity(tripId, activityId, request.getUserId(), request.getStars());
+    return new ResponseEntity<>(HttpStatus.NO_CONTENT);
   }
 
 }
