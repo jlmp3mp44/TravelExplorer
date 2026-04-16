@@ -13,7 +13,9 @@ import com.travel.explorer.google.geocode.LatLng;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
+import com.travel.explorer.repo.ActivityRepository;
 import com.travel.explorer.repo.CityRepository;
+import com.travel.explorer.repo.DayRepository;
 import com.travel.explorer.repo.PlaceRepo;
 import com.travel.explorer.repo.TripRepo;
 import jakarta.transaction.Transactional;
@@ -48,6 +50,15 @@ public class TripServiceImpl implements TripService{
 
   @Autowired
   private PlaceRepo placeRepo;
+
+  @Autowired
+  private DayRepository dayRepository;
+
+  @Autowired
+  private ActivityRepository activityRepository;
+
+  @Autowired
+  private RatingService ratingService;
 
   @Autowired
   ModelMapper modelMapper;
@@ -145,6 +156,7 @@ public class TripServiceImpl implements TripService{
           placeIndex++;
 
           Activity activity = new Activity();
+          activity.setSortOrder(i);
           activity.setDay(day);
           activity.setPlaces(List.of(place));
           day.getActivities().add(activity);
@@ -190,6 +202,78 @@ public class TripServiceImpl implements TripService{
     Trip tripFromDb = tripRepo.findById(tripId)
         .orElseThrow(()-> new ResourceNotFoundException("Trip", "tripId", tripId));
     TripResponce tripResponce = modelMapper.map(tripFromDb, TripResponce.class);
+    ratingService.attachRatingSummaries(tripResponce);
+    return tripResponce;
+  }
+
+  @Override
+  @Transactional
+  public TripResponce reorderDayActivities(Long tripId, Integer dayId, List<Long> orderedActivityIds) {
+    Day day =
+        dayRepository
+            .findByIdAndTrip_Id(dayId, tripId)
+            .orElseThrow(() -> new ResourceNotFoundException("Day", "dayId", dayId.longValue()));
+
+    Set<Long> expected =
+        day.getActivities().stream().map(Activity::getId).collect(Collectors.toSet());
+    if (orderedActivityIds.size() != expected.size() || !new HashSet<>(orderedActivityIds).equals(expected)) {
+      throw new APIException(
+          "orderedActivityIds must list every activity for this day exactly once, in the desired order");
+    }
+
+    List<Activity> toSave = new ArrayList<>();
+    for (int i = 0; i < orderedActivityIds.size(); i++) {
+      Long aid = orderedActivityIds.get(i);
+      Activity activity =
+          activityRepository
+              .findById(aid)
+              .orElseThrow(() -> new ResourceNotFoundException("Activity", "activityId", aid));
+      if (activity.getDay() == null || !activity.getDay().getId().equals(dayId)) {
+        throw new APIException("Activity does not belong to this day");
+      }
+      activity.setSortOrder(i);
+      toSave.add(activity);
+    }
+    activityRepository.saveAll(toSave);
+
+    Trip trip =
+        tripRepo
+            .findById(tripId)
+            .orElseThrow(() -> new ResourceNotFoundException("Trip", "tripId", tripId));
+    TripResponce tripResponce = modelMapper.map(trip, TripResponce.class);
+    ratingService.attachRatingSummaries(tripResponce);
+    return tripResponce;
+  }
+
+  @Override
+  @Transactional
+  public TripResponce replaceActivityWithMockPlace(Long tripId, Long activityId) {
+    Activity activity =
+        activityRepository
+            .findById(activityId)
+            .orElseThrow(() -> new ResourceNotFoundException("Activity", "activityId", activityId));
+    if (activity.getDay() == null
+        || activity.getDay().getTrip() == null
+        || !activity.getDay().getTrip().getId().equals(tripId)) {
+      throw new APIException("Activity does not belong to this trip");
+    }
+
+    Page<Place> placePage = placeRepo.findAll(PageRequest.of(0, 1));
+    if (placePage.isEmpty()) {
+      throw new APIException(
+          "No places in the database to use as a replacement (mock will be replaced later)");
+    }
+    Place mockPlace = placePage.getContent().get(0);
+
+    activity.setPlaces(new ArrayList<>(List.of(mockPlace)));
+    activityRepository.save(activity);
+
+    Trip trip =
+        tripRepo
+            .findById(tripId)
+            .orElseThrow(() -> new ResourceNotFoundException("Trip", "tripId", tripId));
+    TripResponce tripResponce = modelMapper.map(trip, TripResponce.class);
+    ratingService.attachRatingSummaries(tripResponce);
     return tripResponce;
   }
 

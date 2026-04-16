@@ -4,6 +4,7 @@ import com.travel.explorer.entities.Trip;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
+import java.util.List;
 
 public interface TripService {
 
@@ -16,4 +17,13 @@ public interface TripService {
   TripResponce updateTrip(Long tripId, Trip trip);
 
   TripResponce getTripById(Long tripId);
+
+  /** Sets {@code sortOrder} on each activity so it matches the given order (same day, full permutation). */
+  TripResponce reorderDayActivities(Long tripId, Integer dayId, List<Long> orderedActivityIds);
+
+  /**
+   * Replaces an activity's places with a mock substitute (first place in DB). Intended to be swapped for real
+   * recommendation logic later.
+   */
+  TripResponce replaceActivityWithMockPlace(Long tripId, Long activityId);
 }
