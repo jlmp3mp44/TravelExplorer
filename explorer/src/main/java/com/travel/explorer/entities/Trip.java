@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 @Entity
 @Table(name = "trips")
@@ -56,6 +57,11 @@ public class Trip {
   @Column(name= "budget")
   @NotNull
   private Integer budget;
+
+  /** When true, the itinerary is visible to others; each user can still keep personal activity overrides. */
+  @Column(name = "is_public", nullable = false)
+  @ColumnDefault("true")
+  private Boolean isPublic = true;
 
   @ManyToMany
   @JoinTable(

@@ -20,6 +20,8 @@ public class TripResponce {
   private List<String> categories;
   private List<DayResponse> days;
 
+  private Boolean isPublic;
+
   /** Average star rating (1–5), or null if there are no ratings yet. */
   private Double averageRating;
 
