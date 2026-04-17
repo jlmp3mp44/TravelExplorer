@@ -39,8 +39,6 @@ public class Place {
   @Column(name = "google_place_id", length = 256)
   private String googlePlaceId;
 
-  @NotBlank(message = "can not be blank")
-  @Size(min = 3, max = 50, message = "Title should contains between 3 and 50 characters")
   @Column(name = "title")
   private String title;
   @Column(name = "description")

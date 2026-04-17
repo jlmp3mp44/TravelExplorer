@@ -53,6 +53,10 @@ public class User {
   @Column(name = "password")
   private String password;
 
+  /** Optional; used for contact or trip coordination. */
+  @Column(name = "phone_number", length = 32)
+  private String phoneNumber;
+
   @ManyToMany(cascade = {CascadeType.MERGE},
               fetch = FetchType.EAGER)
   @JoinTable(name = "user_roles",

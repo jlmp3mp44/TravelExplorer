@@ -3,6 +3,7 @@ package com.travel.explorer.security.request;
 import com.travel.explorer.entities.Role;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.Set;
 import lombok.Data;
@@ -18,6 +19,11 @@ public class SignUpRequest {
   @NotBlank
   @Size(min = 8, max = 126, message = "Password should contains between 8 and 126 characters")
   private String password;
+
+  @Size(max = 32)
+  @Pattern(regexp = "^$|^\\+?[0-9\\s().-]{6,32}$", message = "Invalid phone number")
+  private String phoneNumber;
+
   private Set<String> roles;
 
 }

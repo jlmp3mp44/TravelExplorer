@@ -77,8 +77,13 @@ public class AuthController {
         .map(item -> item.getAuthority())
         .collect(Collectors.toList());
 
-    UserInfoResponse response = new UserInfoResponse(userDetails.getId(),
-        userDetails.getUsername(), userDetails.getEmail(), roles);
+    UserInfoResponse response =
+        new UserInfoResponse(
+            userDetails.getId(),
+            userDetails.getUsername(),
+            userDetails.getEmail(),
+            userDetails.getPhoneNumber(),
+            roles);
 
     return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
         .body(response);
@@ -126,6 +131,10 @@ public class AuthController {
         passwordEncoder.encode(signUpRequest.getPassword()),
         roles
     );
+    if (signUpRequest.getPhoneNumber() != null) {
+      String p = signUpRequest.getPhoneNumber().trim();
+      user.setPhoneNumber(p.isEmpty() ? null : p);
+    }
 
     userRepository.save(user);
     return ResponseEntity.ok(new MessageResponce("User registered successfully"));
