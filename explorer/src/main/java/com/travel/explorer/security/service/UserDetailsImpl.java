@@ -24,6 +24,7 @@ public class UserDetailsImpl implements UserDetails {
   @JsonIgnore
   private String password;
   private String email;
+  private String phoneNumber;
   private Collection<? extends GrantedAuthority> authorities;
 
   public static UserDetailsImpl build(User user){
@@ -36,6 +37,7 @@ public class UserDetailsImpl implements UserDetails {
         user.getUsername(),
         user.getPassword(),
         user.getEmail(),
+        user.getPhoneNumber(),
         authorities
     );
   }
