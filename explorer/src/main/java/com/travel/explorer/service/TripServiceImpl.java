@@ -450,7 +450,7 @@ public class TripServiceImpl implements TripService {
   }
 
   private String generateTripTitle(Trip trip, TriRequest triRequest) {
-    String place = primaryPlaceLabel(trip, triRequest != null ? triRequest.getCity() : null);
+    String place = primaryPlaceLabel(trip, triRequest);
     LocalDate start = trip.getStartDate();
     LocalDate end = trip.getEndDate();
     if (start == null) {
@@ -482,21 +482,65 @@ public class TripServiceImpl implements TripService {
         + end.getYear();
   }
 
-  private static String primaryPlaceLabel(Trip trip, String fallbackCity) {
+  /**
+   * Place segment for titles, e.g. {@code Paris, France} or {@code Los Angeles, United States}.
+   */
+  private static String primaryPlaceLabel(Trip trip, TriRequest triRequest) {
+    String requestCountry = requestCountryTrimmed(triRequest);
     if (trip.getCities() != null && !trip.getCities().isEmpty()) {
-      return trip.getCities().stream()
-          .map(City::getName)
-          .filter(Objects::nonNull)
-          .map(String::trim)
-          .filter(s -> !s.isEmpty())
-          .sorted()
-          .findFirst()
-          .orElse("Trip");
+      City primary =
+          trip.getCities().stream()
+              .filter(c -> c.getName() != null && !c.getName().trim().isEmpty())
+              .min(Comparator.comparing(c -> c.getName().trim(), String.CASE_INSENSITIVE_ORDER))
+              .orElse(null);
+      if (primary != null) {
+        String cityName = primary.getName().trim();
+        String countryName = countryNameFromCity(primary);
+        if (countryName == null || countryName.isEmpty()) {
+          countryName = requestCountry;
+        }
+        if (countryName != null && !countryName.isEmpty()) {
+          return cityName + ", " + countryName;
+        }
+        return cityName;
+      }
     }
-    if (fallbackCity != null && !fallbackCity.isBlank()) {
-      return fallbackCity.trim();
+    String city = requestCityTrimmed(triRequest);
+    if (!city.isEmpty()) {
+      if (!requestCountry.isEmpty()) {
+        return city + ", " + requestCountry;
+      }
+      return city;
+    }
+    if (!requestCountry.isEmpty()) {
+      return requestCountry;
     }
     return "Trip";
+  }
+
+  private static String countryNameFromCity(City city) {
+    if (city.getCountry() == null
+        || city.getCountry().getName() == null
+        || city.getCountry().getName().isBlank()) {
+      return "";
+    }
+    return city.getCountry().getName().trim();
+  }
+
+  private static String requestCityTrimmed(TriRequest triRequest) {
+    if (triRequest == null || triRequest.getCity() == null) {
+      return "";
+    }
+    String t = triRequest.getCity().trim();
+    return t.isEmpty() ? "" : t;
+  }
+
+  private static String requestCountryTrimmed(TriRequest triRequest) {
+    if (triRequest == null || triRequest.getCountry() == null) {
+      return "";
+    }
+    String t = triRequest.getCountry().trim();
+    return t.isEmpty() ? "" : t;
   }
 
   private static String truncateTitle(String raw) {
