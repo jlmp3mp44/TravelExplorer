@@ -15,6 +15,9 @@ public class ActivityResponse {
 
   private Long id;
 
+  /** True if this activity was added manually by the user (vs generated itinerary). */
+  private Boolean userAdded;
+
   /** Present on GET trip when {@code userId} is passed and this user customized the activity. */
   private ActivityUserPreferenceResponse userPreference;
 
