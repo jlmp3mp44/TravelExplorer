@@ -2,6 +2,7 @@ package com.travel.explorer.controller;
 
 import com.travel.explorer.config.AppConstants;
 import com.travel.explorer.payload.rating.RatingRequest;
+import com.travel.explorer.payload.trip.ActivityManualEditRequest;
 import com.travel.explorer.payload.trip.ReplaceActivityRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
@@ -102,6 +103,29 @@ public class TripController {
       @Valid @RequestBody ReplaceActivityRequest request) {
     TripResponce updated = tripService.replaceActivityWithMockPlace(tripId, activityId, request);
     return new ResponseEntity<>(updated, HttpStatus.OK);
+  }
+
+  @DeleteMapping("{tripId}/activities/{activityId}")
+  public ResponseEntity<TripResponce> deleteTripActivity(
+      @PathVariable Long tripId,
+      @PathVariable Long activityId,
+      @Valid @RequestBody ActivityManualEditRequest request,
+      Authentication authentication) {
+    TripResponce updated =
+        tripService.deleteTripActivity(
+            tripId, activityId, request, currentUserId(authentication));
+    return new ResponseEntity<>(updated, HttpStatus.OK);
+  }
+
+  @PostMapping("{tripId}/days/{dayId}/activities")
+  public ResponseEntity<TripResponce> addTripActivityWithMockPlace(
+      @PathVariable Long tripId,
+      @PathVariable Integer dayId,
+      Authentication authentication) {
+    TripResponce updated =
+        tripService.addTripActivityWithMockPlace(
+            tripId, dayId, currentUserId(authentication));
+    return new ResponseEntity<>(updated, HttpStatus.CREATED);
   }
 
   @PostMapping("{tripId}/ratings")

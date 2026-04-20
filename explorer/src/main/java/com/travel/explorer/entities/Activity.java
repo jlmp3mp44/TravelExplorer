@@ -43,6 +43,12 @@ public class Activity {
       inverseJoinColumns = @JoinColumn(name = "place_id"),
       name = "activity_places")
   private List<Place> places =  new ArrayList<>();
+
+  /** True when this stop was added manually by the trip owner (not from auto-generated itinerary). */
+  @Column(name = "user_added", nullable = false)
+  @ColumnDefault("false")
+  private Boolean userAdded = false;
+
   private LocalDateTime startTime;
   private LocalDateTime endTime;
 
