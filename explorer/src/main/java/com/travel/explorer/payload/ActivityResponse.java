@@ -1,12 +1,6 @@
 package com.travel.explorer.payload;
 
-import com.travel.explorer.entities.Day;
-import com.travel.explorer.entities.Place;
 import com.travel.explorer.payload.place.PlaceResponse;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
-import jakarta.persistence.ManyToOne;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +12,18 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class ActivityResponse {
-  private List<PlaceResponse> places =  new ArrayList<>();
+
+  private Long id;
+
+  /** Present on GET trip when {@code userId} is passed and this user customized the activity. */
+  private ActivityUserPreferenceResponse userPreference;
+
+  private List<PlaceResponse> places = new ArrayList<>();
   private LocalDateTime startTime;
   private LocalDateTime endTime;
+
+  /** Average star rating (1–5), or null if there are no ratings yet. */
+  private Double averageRating;
+
+  private long ratingCount;
 }

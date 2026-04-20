@@ -19,5 +19,15 @@ public class TripResponce {
   /** Google Places type codes selected for this trip */
   private List<String> categories;
   private List<DayResponse> days;
+
+  private Boolean isPublic;
+
+  /** Present when the trip was created by a logged-in user; use to detect ownership on the client. */
+  private Long ownerId;
+
+  /** Average star rating (1–5), or null if there are no ratings yet. */
+  private Double averageRating;
+
+  private long ratingCount;
 }
 

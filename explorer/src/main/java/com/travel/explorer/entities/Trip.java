@@ -10,7 +10,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.ManyToMany;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderColumn;
 import jakarta.persistence.Table;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 @Entity
 @Table(name = "trips")
@@ -40,8 +43,8 @@ public class Trip {
   private Long id;
 
   @NotBlank(message = "can not be blank")
-  @Size(min = 3, max = 50, message = "Title must contains between 3 and 50 characters")
-  @Column(name = "title")
+  @Size(min = 3, max = 120, message = "Title must contain between 3 and 120 characters")
+  @Column(name = "title", length = 120)
   private String title;
 
   @Column(name = "description")
@@ -56,6 +59,15 @@ public class Trip {
   @Column(name= "budget")
   @NotNull
   private Integer budget;
+
+  /** When true, the itinerary is visible to others; each user can still keep personal activity overrides. */
+  @Column(name = "is_public", nullable = false)
+  @ColumnDefault("true")
+  private Boolean isPublic = true;
+
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "owner_user_id")
+  private User owner;
 
   @ManyToMany
   @JoinTable(

@@ -1,5 +1,6 @@
 package com.travel.explorer.entities;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -13,6 +14,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.AllArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -27,6 +29,12 @@ public class Activity {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
   private Long id;
+
+  /** Order of this activity within its day (0-based). */
+  @Column(name = "sort_order", nullable = false)
+  @ColumnDefault("0")
+  private Integer sortOrder = 0;
+
   @ManyToOne
   @JoinColumn(name = "day_id")
   private Day day;
