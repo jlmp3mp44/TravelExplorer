@@ -92,4 +92,14 @@ public class Trip {
         .map(City::getCountry)
         .collect(Collectors.toSet());
   }
+
+  @OneToMany(mappedBy = "trip",
+      cascade = CascadeType.ALL,
+      orphanRemoval = true)
+  private List<TripRating> ratings = new ArrayList<>();
+
+  @OneToMany(mappedBy = "trip",
+      cascade = CascadeType.ALL,
+      orphanRemoval = true)
+  private List<TripItineraryPlaceAdjustment> tripItineraryPlaceAdjustments = new ArrayList<>();
 }
