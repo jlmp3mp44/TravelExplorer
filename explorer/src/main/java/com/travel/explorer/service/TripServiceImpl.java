@@ -1,10 +1,13 @@
 package com.travel.explorer.service;
 
 import com.travel.explorer.entities.Activity;
+import com.travel.explorer.entities.ActivityChangeReason;
 import com.travel.explorer.entities.City;
 import com.travel.explorer.entities.Day;
+import com.travel.explorer.entities.ItineraryAdjustmentKind;
 import com.travel.explorer.entities.Place;
 import com.travel.explorer.entities.Trip;
+import com.travel.explorer.entities.TripItineraryPlaceAdjustment;
 import com.travel.explorer.entities.User;
 import com.travel.explorer.entities.UserActivityPreference;
 import com.travel.explorer.excpetions.APIException;
@@ -15,6 +18,7 @@ import com.travel.explorer.payload.ActivityResponse;
 import com.travel.explorer.payload.ActivityUserPreferenceResponse;
 import com.travel.explorer.payload.DayResponse;
 import com.travel.explorer.payload.place.PlaceResponse;
+import com.travel.explorer.payload.trip.ActivityManualEditRequest;
 import com.travel.explorer.payload.trip.ReplaceActivityRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
@@ -24,6 +28,7 @@ import com.travel.explorer.repo.ActivityRepository;
 import com.travel.explorer.repo.CityRepository;
 import com.travel.explorer.repo.DayRepository;
 import com.travel.explorer.repo.PlaceRepo;
+import com.travel.explorer.repo.TripItineraryPlaceAdjustmentRepository;
 import com.travel.explorer.repo.TripRepo;
 import com.travel.explorer.repo.UserActivityPreferenceRepository;
 import com.travel.explorer.repo.UserRepository;
@@ -32,9 +37,9 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -74,6 +79,9 @@ public class TripServiceImpl implements TripService {
 
   @Autowired
   private UserActivityPreferenceRepository userActivityPreferenceRepository;
+
+  @Autowired
+  private TripItineraryPlaceAdjustmentRepository tripItineraryPlaceAdjustmentRepository;
 
   @Autowired
   ModelMapper modelMapper;
@@ -374,6 +382,103 @@ public class TripServiceImpl implements TripService {
     userActivityPreferenceRepository.save(pref);
 
     return getTripById(tripId, request.getUserId());
+  }
+
+  @Override
+  @Transactional
+  public TripResponce deleteTripActivity(
+      Long tripId,
+      Long activityId,
+      ActivityManualEditRequest request,
+      Long currentUserId) {
+    Activity activity =
+        activityRepository
+            .findById(activityId)
+            .orElseThrow(() -> new ResourceNotFoundException("Activity", "activityId", activityId));
+    if (activity.getDay() == null
+        || activity.getDay().getTrip() == null
+        || !activity.getDay().getTrip().getId().equals(tripId)) {
+      throw new APIException("Activity does not belong to this trip");
+    }
+    Trip trip = activity.getDay().getTrip();
+    assertTripAccess(trip, currentUserId);
+
+    Day day = activity.getDay();
+    Long removedId = activity.getId();
+    recordTripItineraryAdjustment(
+        trip,
+        currentUserId,
+        ItineraryAdjustmentKind.REMOVE,
+        request.getReason(),
+        removedId,
+        null);
+
+    day.getActivities().remove(activity);
+    activityRepository.delete(activity);
+
+    List<Activity> remaining = new ArrayList<>(day.getActivities());
+    remaining.sort(Comparator.comparing(Activity::getSortOrder));
+    for (int i = 0; i < remaining.size(); i++) {
+      remaining.get(i).setSortOrder(i);
+    }
+    activityRepository.saveAll(remaining);
+
+    return getTripById(tripId, currentUserId);
+  }
+
+  @Override
+  @Transactional
+  public TripResponce addTripActivityWithMockPlace(Long tripId, Integer dayId, Long currentUserId) {
+    Day day =
+        dayRepository
+            .findByIdAndTrip_Id(dayId, tripId)
+            .orElseThrow(() -> new ResourceNotFoundException("Day", "dayId", dayId.longValue()));
+    Trip trip = day.getTrip();
+    assertTripAccess(trip, currentUserId);
+
+    Page<Place> placePage = placeRepo.findAll(PageRequest.of(0, 1));
+    if (placePage.isEmpty()) {
+      throw new APIException(
+          "No places in the database to use as a replacement (mock will be replaced later)");
+    }
+    Place mockPlace = placePage.getContent().get(0);
+
+    int nextOrder =
+        day.getActivities().stream().mapToInt(Activity::getSortOrder).max().orElse(-1) + 1;
+
+    Activity activity = new Activity();
+    activity.setSortOrder(nextOrder);
+    activity.setDay(day);
+    activity.setUserAdded(true);
+    activity.setPlaces(List.of(mockPlace));
+    day.getActivities().add(activity);
+    activityRepository.save(activity);
+
+    return getTripById(tripId, currentUserId);
+  }
+
+  private void recordTripItineraryAdjustment(
+      Trip trip,
+      Long currentUserId,
+      ItineraryAdjustmentKind kind,
+      ActivityChangeReason reason,
+      Long removedActivityId,
+      Long createdActivityId) {
+    TripItineraryPlaceAdjustment row = new TripItineraryPlaceAdjustment();
+    row.setTrip(trip);
+    User user = null;
+    if (currentUserId != null) {
+      user = userRepository.findById(currentUserId).orElse(null);
+    }
+    if (user == null) {
+      user = trip.getOwner();
+    }
+    row.setUser(user);
+    row.setKind(kind);
+    row.setReason(reason);
+    row.setRemovedActivityId(removedActivityId);
+    row.setCreatedActivityId(createdActivityId);
+    tripItineraryPlaceAdjustmentRepository.save(row);
   }
 
   private TripResponce toResponse(Trip trip) {

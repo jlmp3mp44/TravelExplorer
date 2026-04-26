@@ -26,3 +26,4 @@ public class GooglePlaceDto {
   private String businessStatus;
   private Integer priceLevel;
 }
+

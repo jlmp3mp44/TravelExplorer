@@ -1,5 +1,6 @@
 package com.travel.explorer.service;
 
+import com.travel.explorer.payload.trip.ActivityManualEditRequest;
 import com.travel.explorer.payload.trip.ReplaceActivityRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
@@ -50,4 +51,19 @@ public interface TripService {
    */
   TripResponce replaceActivityWithMockPlace(
       Long tripId, Long activityId, ReplaceActivityRequest request);
+
+  /**
+   * Deletes an activity from the trip and records {@link com.travel.explorer.entities.ActivityChangeReason}.
+   */
+  TripResponce deleteTripActivity(
+      Long tripId,
+      Long activityId,
+      ActivityManualEditRequest request,
+      Long currentUserId);
+
+  /**
+   * Appends an activity on the given day using the first place in the DB as a mock (same pattern as
+   * {@link #replaceActivityWithMockPlace}). The new activity is marked {@code userAdded}.
+   */
+  TripResponce addTripActivityWithMockPlace(Long tripId, Integer dayId, Long currentUserId);
 }

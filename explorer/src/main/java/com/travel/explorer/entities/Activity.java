@@ -1,5 +1,6 @@
 package com.travel.explorer.entities;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -9,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -43,6 +45,18 @@ public class Activity {
       inverseJoinColumns = @JoinColumn(name = "place_id"),
       name = "activity_places")
   private List<Place> places =  new ArrayList<>();
+
+  /** True when this stop was added manually by the trip owner (not from auto-generated itinerary). */
+  @Column(name = "user_added", nullable = false)
+  @ColumnDefault("false")
+  private Boolean userAdded = false;
+
+  @OneToMany(mappedBy = "activity",
+      cascade = CascadeType.ALL,
+      orphanRemoval = true)
+  private List<ActivityRating
+      > ratings = new ArrayList<>();
+
   private LocalDateTime startTime;
   private LocalDateTime endTime;
 
