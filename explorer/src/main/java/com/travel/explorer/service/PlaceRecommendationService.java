@@ -9,120 +9,108 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class PlaceRecommendationService {
 
-  private static final double CATEGORY_MATCH_WEIGHT = 100.0;
-  private static final double PRIMARY_TYPE_BONUS = 45.0;
-  private static final double RATING_WEIGHT = 8.0;
-  private static final double POPULARITY_WEIGHT = 8.0;
-  private static final double DIVERSITY_PENALTY = 10.0;
-  private static final double OPERATIONAL_BONUS = 5.0;
-  private static final double TEMPORARILY_CLOSED_PENALTY = 120.0;
-  private static final double PERMANENTLY_CLOSED_PENALTY = 300.0;
-  private static final double MISSING_TITLE_PENALTY = 15.0;
-  private static final double MISSING_ADDRESS_PENALTY = 8.0;
-  private static final double MISSING_CATEGORY_PENALTY = 20.0;
+  private static final double DIVERSITY_PENALTY = 0.3;
 
-  public List<Place> rankPlaces(List<Place> places, List<String> selectedCategoryCodes) {
+  private final ContentBasedScorer contentBasedScorer;
+  private final CollaborativeFilteringClient collaborativeFilteringClient;
+
+  @Value("${recommendation.content.weight:0.6}")
+  private double contentWeight;
+
+  @Value("${recommendation.svd.weight:0.4}")
+  private double svdWeight;
+
+  public PlaceRecommendationService(
+      ContentBasedScorer contentBasedScorer,
+      CollaborativeFilteringClient collaborativeFilteringClient) {
+    this.contentBasedScorer = contentBasedScorer;
+    this.collaborativeFilteringClient = collaborativeFilteringClient;
+  }
+
+  public List<Place> rankPlaces(
+      List<Place> places, List<String> selectedCategoryCodes, Long userId) {
     if (places == null || places.isEmpty()) {
       return List.of();
     }
 
-    Set<String> selected = normalizeToSet(selectedCategoryCodes);
-    List<RankedPlace> remaining = new ArrayList<>(places.size());
+    // Filter out permanently/temporarily closed places
+    List<Place> openPlaces = new ArrayList<>(places.size());
     for (Place place : places) {
+      if (Boolean.TRUE.equals(place.getPermanentlyClosed())) continue;
+      if (Boolean.TRUE.equals(place.getTemporarilyClosed())) continue;
+      String status = place.getBusinessStatus();
+      if (status != null) {
+        String normalized = status.trim().toUpperCase(Locale.ROOT);
+        if ("CLOSED_PERMANENTLY".equals(normalized) || "CLOSED_TEMPORARILY".equals(normalized)) {
+          continue;
+        }
+      }
+      openPlaces.add(place);
+    }
+    if (openPlaces.isEmpty()) {
+      return List.of();
+    }
+
+    Set<String> selected = normalizeToSet(selectedCategoryCodes);
+
+    // Compute content-based scores
+    Map<Place, Double> contentScores = new HashMap<>(openPlaces.size());
+    List<Long> placeIdsForSvd = new ArrayList<>();
+    for (Place place : openPlaces) {
+      contentScores.put(place, contentBasedScorer.score(place, selected));
+      if (place.getId() != null) {
+        placeIdsForSvd.add(place.getId());
+      }
+    }
+
+    // Fetch SVD predictions if userId is provided
+    Map<Long, Double> svdPredictions =
+        (userId != null && !placeIdsForSvd.isEmpty())
+            ? collaborativeFilteringClient.predictRatings(userId, placeIdsForSvd)
+            : Map.of();
+
+    // Build ranked entries with blended scores
+    List<RankedPlace> remaining = new ArrayList<>(openPlaces.size());
+    for (Place place : openPlaces) {
+      double contentScore = contentScores.get(place);
+      double normalizedContent = Math.min(5.0, Math.max(0.0, contentScore / 100.0));
+
+      double finalScore;
+      Double svdScore =
+          (place.getId() != null) ? svdPredictions.get(place.getId()) : null;
+      if (svdScore != null) {
+        finalScore = contentWeight * normalizedContent + svdWeight * svdScore;
+      } else {
+        // Cold-start or no ID: use content-based only
+        finalScore = normalizedContent;
+      }
+
       Set<String> placeCategories = extractCategoryCodes(place);
-      remaining.add(new RankedPlace(place, placeCategories, baseScore(place, placeCategories, selected)));
+      remaining.add(new RankedPlace(place, placeCategories, finalScore));
     }
     remaining.sort(BASE_COMPARATOR);
 
+    // Greedy diversity-aware selection
     Map<String, Integer> categoryUsage = new HashMap<>();
     List<Place> ranked = new ArrayList<>(remaining.size());
     while (!remaining.isEmpty()) {
       RankedPlace next = chooseNext(remaining, categoryUsage);
       remaining.remove(next);
-      next.place().setTotalScore((int) Math.round(adjustedScore(next, categoryUsage)));
+      double adjusted = adjustedScore(next, categoryUsage);
+      next.place().setTotalScore((int) Math.round(adjusted * 100));
       ranked.add(next.place());
       for (String code : next.matchedSelectedCategories(selected)) {
         categoryUsage.merge(code, 1, Integer::sum);
       }
     }
     return ranked;
-  }
-
-  private double baseScore(Place place, Set<String> placeCategories, Set<String> selected) {
-    double score = relevanceScore(place, placeCategories, selected);
-    score += qualityScore(place);
-    score += businessStatusScore(place);
-
-    if (isBlank(place.getTitle())) {
-      score -= MISSING_TITLE_PENALTY;
-    }
-    if (isBlank(place.getAddress())) {
-      score -= MISSING_ADDRESS_PENALTY;
-    }
-    if (!selected.isEmpty() && placeCategories.isEmpty()) {
-      score -= MISSING_CATEGORY_PENALTY;
-    }
-    return score;
-  }
-
-  private double relevanceScore(Place place, Set<String> placeCategories, Set<String> selected) {
-    if (selected.isEmpty()) {
-      return 0.0;
-    }
-    int matchedCount = 0;
-    for (String code : placeCategories) {
-      if (selected.contains(code)) {
-        matchedCount++;
-      }
-    }
-
-    double score = matchedCount * CATEGORY_MATCH_WEIGHT;
-    String primaryType = normalize(place.getPrimaryType());
-    if (primaryType != null && selected.contains(primaryType)) {
-      score += PRIMARY_TYPE_BONUS;
-    }
-    return score;
-  }
-
-  private double qualityScore(Place place) {
-    double score = 0.0;
-
-    if (place.getRating() != null) {
-      double boundedRating = Math.max(0.0, Math.min(5.0, place.getRating()));
-      score += boundedRating * RATING_WEIGHT;
-    }
-    if (place.getUserRatingCount() != null && place.getUserRatingCount() > 0) {
-      score += Math.log10(place.getUserRatingCount() + 1.0) * POPULARITY_WEIGHT;
-    }
-    return score;
-  }
-
-  private double businessStatusScore(Place place) {
-    if (Boolean.TRUE.equals(place.getPermanentlyClosed())) {
-      return -PERMANENTLY_CLOSED_PENALTY;
-    }
-    if (Boolean.TRUE.equals(place.getTemporarilyClosed())) {
-      return -TEMPORARILY_CLOSED_PENALTY;
-    }
-
-    String status = normalize(place.getBusinessStatus());
-    if (Objects.equals(status, "operational")) {
-      return OPERATIONAL_BONUS;
-    }
-    if (Objects.equals(status, "closed_temporarily")) {
-      return -TEMPORARILY_CLOSED_PENALTY;
-    }
-    if (Objects.equals(status, "closed_permanently")) {
-      return -PERMANENTLY_CLOSED_PENALTY;
-    }
-    return 0.0;
   }
 
   private double adjustedScore(RankedPlace candidate, Map<String, Integer> categoryUsage) {
@@ -142,7 +130,9 @@ public class PlaceRecommendationService {
       if (adjusted > bestScore) {
         bestScore = adjusted;
         best = candidate;
-      } else if (adjusted == bestScore && best != null && BASE_COMPARATOR.compare(candidate, best) < 0) {
+      } else if (adjusted == bestScore
+          && best != null
+          && BASE_COMPARATOR.compare(candidate, best) < 0) {
         best = candidate;
       }
     }
@@ -188,10 +178,6 @@ public class PlaceRecommendationService {
     return normalized.isEmpty() ? null : normalized;
   }
 
-  private boolean isBlank(String value) {
-    return value == null || value.isBlank();
-  }
-
   private static final Comparator<RankedPlace> BASE_COMPARATOR =
       Comparator.comparingDouble(RankedPlace::baseScore)
           .reversed()
@@ -202,7 +188,10 @@ public class PlaceRecommendationService {
   private record RankedPlace(Place place, Set<String> placeCategories, double baseScore) {
     Set<String> matchedSelectedCategories(Set<String> selected) {
       Set<String> matched = new HashSet<>();
-      if (selected == null || selected.isEmpty() || placeCategories == null || placeCategories.isEmpty()) {
+      if (selected == null
+          || selected.isEmpty()
+          || placeCategories == null
+          || placeCategories.isEmpty()) {
         return matched;
       }
       for (String code : placeCategories) {
