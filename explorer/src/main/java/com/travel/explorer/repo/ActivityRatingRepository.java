@@ -1,6 +1,7 @@
 package com.travel.explorer.repo;
 
 import com.travel.explorer.entities.ActivityRating;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -16,4 +17,7 @@ public interface ActivityRatingRepository extends JpaRepository<ActivityRating, 
   Optional<Double> averageStarsByActivityId(@Param("activityId") Long activityId);
 
   long countByActivity_Id(Long activityId);
+
+  @Query("SELECT DISTINCT r FROM ActivityRating r JOIN FETCH r.user JOIN FETCH r.activity a JOIN FETCH a.places")
+  List<ActivityRating> findAllWithPlaces();
 }

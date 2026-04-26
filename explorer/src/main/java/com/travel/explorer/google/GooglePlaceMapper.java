@@ -41,6 +41,7 @@ public class GooglePlaceMapper {
       place.setLocation(location);
     }
     place.setCategories(categoryResolutionService.resolveFromGoogleTypes(dto.getTypes()));
+    place.setPriceLevel(dto.getPriceLevel());
     place.setPermanentlyClosed(isBusinessStatus(dto.getBusinessStatus(), "CLOSED_PERMANENTLY"));
     place.setTemporarilyClosed(isBusinessStatus(dto.getBusinessStatus(), "CLOSED_TEMPORARILY"));
     return place;

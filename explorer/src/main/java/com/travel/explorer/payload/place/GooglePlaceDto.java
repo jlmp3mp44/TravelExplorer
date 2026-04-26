@@ -24,4 +24,5 @@ public class GooglePlaceDto {
   private Double rating;
   private Integer userRatingCount;
   private String businessStatus;
+  private Integer priceLevel;
 }

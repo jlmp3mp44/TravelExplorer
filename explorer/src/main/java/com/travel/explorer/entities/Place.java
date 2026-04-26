@@ -60,6 +60,8 @@ public class Place {
   private Double rating;
   @Column(name = "userRatingCount")
   private Integer userRatingCount;
+  @Column(name = "price_level")
+  private Integer priceLevel;
   @Column(name = "neighborhood")
   private String neighborhood;
   @Column(name = "city")
