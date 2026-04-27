@@ -12,7 +12,6 @@ import com.travel.explorer.entities.User;
 import com.travel.explorer.entities.UserActivityPreference;
 import com.travel.explorer.excpetions.APIException;
 import com.travel.explorer.excpetions.ResourceNotFoundException;
-import com.travel.explorer.google.GooglePlaceService;
 import com.travel.explorer.google.geocode.GoogleGeocodingService;
 import com.travel.explorer.google.geocode.LatLng;
 import com.travel.explorer.payload.ActivityResponse;
@@ -57,8 +56,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class TripServiceImpl implements TripService {
 
-  private static final int ACTIVITIES_PER_DAY = 3;
-
   @Autowired
   private TripRepo tripRepo;
 
@@ -90,10 +87,19 @@ public class TripServiceImpl implements TripService {
   ModelMapper modelMapper;
 
   @Autowired
-  private GooglePlaceService googlePlaceService;
+  private GoogleGeocodingService googleGeocodingService;
 
   @Autowired
-  private GoogleGeocodingService googleGeocodingService;
+  private PlaceRecommendationService placeRecommendationService;
+
+  @Autowired
+  private PlaceCandidateAggregator placeCandidateAggregator;
+
+  @Autowired
+  private ItineraryScheduler itineraryScheduler;
+
+  @Autowired
+  private BudgetService budgetService;
 
   @Override
   public TripListResponce getAllTrips(
@@ -173,6 +179,10 @@ public class TripServiceImpl implements TripService {
     if (trip.getIsPublic() == null) {
       trip.setIsPublic(true);
     }
+    if (trip.getStartDate() != null && trip.getEndDate() != null
+        && trip.getEndDate().isBefore(trip.getStartDate())) {
+      throw new APIException("endDate must be on or after startDate");
+    }
 
     String geocodeAddress;
     if (triRequest.getCityIds() != null
@@ -187,7 +197,7 @@ public class TripServiceImpl implements TripService {
     } else {
       geocodeAddress = buildGeocodeAddress(triRequest);
     }
-    fillItineraryFromNearbySearch(trip, geocodeAddress);
+    fillItineraryFromNearbySearch(trip, geocodeAddress, ownerUserId);
 
     trip.setTitle(truncateTitle(generateTripTitle(trip, triRequest)));
 
@@ -266,7 +276,8 @@ public class TripServiceImpl implements TripService {
       }
       String geocodeAddress = resolveGeocodeAddress(trip);
       trip.getDays().clear();
-      fillItineraryFromNearbySearch(trip, geocodeAddress);
+      fillItineraryFromNearbySearch(trip, geocodeAddress,
+          trip.getOwner() != null ? trip.getOwner().getUserId() : null);
       boolean userSetTitle = request.getTitle() != null && !request.getTitle().isBlank();
       if (!userSetTitle) {
         trip.setTitle(truncateTitle(generateTripTitle(trip, null)));
@@ -475,6 +486,23 @@ public class TripServiceImpl implements TripService {
     if (trip.getOwner() != null) {
       r.setOwnerId(trip.getOwner().getUserId());
     }
+    // Compute estimated budget from all places in the trip
+    List<Place> allPlaces = new ArrayList<>();
+    if (trip.getDays() != null) {
+      for (Day day : trip.getDays()) {
+        if (day.getActivities() != null) {
+          for (Activity activity : day.getActivities()) {
+            if (activity.getPlaces() != null) {
+              allPlaces.addAll(activity.getPlaces());
+            }
+          }
+        }
+      }
+    }
+    if (!allPlaces.isEmpty() && trip.getStartDate() != null && trip.getEndDate() != null) {
+      int tripDays = (int) (trip.getEndDate().toEpochDay() - trip.getStartDate().toEpochDay()) + 1;
+      r.setEstimatedBudget(budgetService.computeEstimatedBudget(allPlaces, tripDays));
+    }
     return r;
   }
 
@@ -513,7 +541,7 @@ public class TripServiceImpl implements TripService {
     return buildGeocodeAddressFromCity(primary);
   }
 
-  private void fillItineraryFromNearbySearch(Trip trip, String geocodeAddress) {
+  private void fillItineraryFromNearbySearch(Trip trip, String geocodeAddress, Long ownerUserId) {
     LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
     double radius = 10000.0;
 
@@ -522,36 +550,42 @@ public class TripServiceImpl implements TripService {
       return;
     }
 
-    List<Place> generatedPlaces =
-        googlePlaceService.searchNearby(
-            center.latitude(), center.longitude(), radius, searchTypes);
+    // 1. Aggregate candidates from Google API + DB
+    List<Place> candidates = placeCandidateAggregator.aggregateCandidates(
+        center.latitude(), center.longitude(), radius, searchTypes);
 
-    if (generatedPlaces != null && !generatedPlaces.isEmpty()) {
-      List<Place> savedPlaces = new ArrayList<>();
-      for (Place place : generatedPlaces) {
+    // 2. Score with hybrid recommender (content + SVD)
+    List<Place> rankedPlaces = placeRecommendationService.rankPlaces(
+        candidates, searchTypes, ownerUserId);
+
+    if (rankedPlaces.isEmpty()) {
+      return;
+    }
+
+    // 3. Merge with existing DB records or persist new places
+    List<Place> savedPlaces = new ArrayList<>();
+    for (Place place : rankedPlaces) {
+      if (place.getId() != null) {
+        // Already a persisted entity from DB aggregation
+        savedPlaces.add(place);
+      } else if (place.getGooglePlaceId() != null && !place.getGooglePlaceId().isBlank()) {
+        // Try to find existing by googlePlaceId to avoid duplicates
+        Place existing = placeRepo.findByGooglePlaceId(place.getGooglePlaceId()).orElse(null);
+        if (existing != null) {
+          savedPlaces.add(existing);
+        } else {
+          savedPlaces.add(placeRepo.save(place));
+        }
+      } else {
         savedPlaces.add(placeRepo.save(place));
       }
-
-      int placeIndex = 0;
-      for (LocalDate d = trip.getStartDate(); !d.isAfter(trip.getEndDate()); d = d.plusDays(1)) {
-        Day day = new Day();
-        day.setDate(d);
-        day.setTrip(trip);
-
-        for (int i = 0; i < ACTIVITIES_PER_DAY; i++) {
-          Place place = savedPlaces.get(placeIndex % savedPlaces.size());
-          placeIndex++;
-
-          Activity activity = new Activity();
-          activity.setSortOrder(i);
-          activity.setDay(day);
-          activity.setPlaces(List.of(place));
-          day.getActivities().add(activity);
-        }
-
-        trip.getDays().add(day);
-      }
     }
+
+    // 4. Schedule using ItineraryScheduler (handles budget, time, open hours)
+    ItineraryScheduler.ScheduleResult result = itineraryScheduler.schedule(
+        trip, savedPlaces, budgetService, trip.getBudget());
+
+    trip.getDays().addAll(result.days());
   }
 
   private String generateTripTitle(Trip trip, TriRequest triRequest) {
