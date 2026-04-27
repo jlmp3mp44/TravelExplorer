@@ -9,4 +9,6 @@ public class GooglePlacesResponse {
 
   private List<GooglePlaceDto> places;
 
+  /** Pagination token for the next page. Null when no more results. */
+  private String nextPageToken;
 }

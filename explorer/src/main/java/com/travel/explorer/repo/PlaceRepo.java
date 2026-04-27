@@ -1,6 +1,7 @@
 package com.travel.explorer.repo;
 
 import com.travel.explorer.entities.Place;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,6 +15,8 @@ public interface PlaceRepo extends JpaRepository<Place, Long> {
   Optional<Place> findByTitle(String title);
 
   Optional<Place> findByGooglePlaceId(String googlePlaceId);
+
+  List<Place> findAllByGooglePlaceIdIn(Collection<String> googlePlaceIds);
 
   @Query("SELECT DISTINCT p FROM Place p " +
       "JOIN p.categories c " +
