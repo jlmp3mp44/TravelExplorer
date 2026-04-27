@@ -34,7 +34,7 @@ public class PlaceCandidateAggregator {
   public List<Place> aggregateCandidates(
       double lat, double lng, double radius, List<String> categoryTypes) {
 
-    List<Place> googlePlaces = googlePlaceService.searchNearby(lat, lng, radius, categoryTypes);
+    List<Place> googlePlaces = googlePlaceService.searchByCategories(lat, lng, radius, categoryTypes);
 
     double deltaLat = radius / 111_000.0;
     double deltaLng = radius / (111_000.0 * Math.cos(Math.toRadians(lat)));
