@@ -1,6 +1,6 @@
 package com.travel.explorer.payload.trip;
 
-import com.travel.explorer.entities.Trip;
+import com.travel.explorer.entities.TripIntensity;
 import com.travel.explorer.payload.DayResponse;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -18,6 +18,10 @@ public class TripResponce {
   private String endDate;
   /** Google Places type codes selected for this trip */
   private List<String> categories;
+
+  /** Pace / density from trip creation, if set. */
+  private TripIntensity intensity;
+
   private List<DayResponse> days;
 
   private Boolean isPublic;

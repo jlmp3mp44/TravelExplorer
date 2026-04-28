@@ -2,6 +2,7 @@ package com.travel.explorer.payload.trip;
 
 import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.travel.explorer.entities.TripIntensity;
 import com.travel.explorer.validation.ValidPlaceInterestCodes;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
@@ -40,5 +41,8 @@ public class TriRequest {
 
   /** Defaults to true when omitted. */
   private Boolean isPublic;
+
+  /** LOW / MEDIUM / HIGH — stored only; not used for logic yet. */
+  private TripIntensity intensity;
 }
 
