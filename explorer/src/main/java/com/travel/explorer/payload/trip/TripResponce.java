@@ -33,5 +33,7 @@ public class TripResponce {
   private Double averageRating;
 
   private long ratingCount;
+
+  private EstimatedBudget estimatedBudget;
 }
 

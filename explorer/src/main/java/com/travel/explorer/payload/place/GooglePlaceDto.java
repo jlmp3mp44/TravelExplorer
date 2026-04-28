@@ -13,11 +13,17 @@ import lombok.NoArgsConstructor;
 public class GooglePlaceDto {
 
   /** Google Places short id (JSON field {@code id}). */
-  @JsonProperty("place_id")
+  @JsonProperty("id")
   private String googlePlaceId;
   private String formattedAddress;
   private DisplayNameDto displayName;
   private List<String> types;
   /** Google Places LatLng ({@code latitude} / {@code longitude}). */
   private Center location;
+  private String primaryType;
+  private Double rating;
+  private Integer userRatingCount;
+  private String businessStatus;
+  private String priceLevel;
+
 }
