@@ -10,7 +10,14 @@ import java.util.List;
 
 public interface TripService {
 
-  TripListResponce getAllTrips(String sortBy, String sortOrder, Integer pageNumber, Integer pageSize);
+  TripListResponce getAllTrips(
+      String sortBy,
+      String sortOrder,
+      Integer pageNumber,
+      Integer pageSize,
+      List<String> categoryCodes,
+      Long countryId,
+      String countryName);
 
   /**
    * Paginated trips owned by {@code ownerUserId}. Same sort/pagination shape as {@link #getAllTrips}.
@@ -28,7 +35,10 @@ public interface TripService {
       String sortBy,
       String sortOrder,
       Integer pageNumber,
-      Integer pageSize);
+      Integer pageSize,
+      List<String> categoryCodes,
+      Long countryId,
+      String countryName);
 
   TripResponce saveTrip(TriRequest triRequest, Long ownerUserId);
 
@@ -66,4 +76,7 @@ public interface TripService {
    * {@link #replaceActivityWithMockPlace}). The new activity is marked {@code userAdded}.
    */
   TripResponce addTripActivityWithMockPlace(Long tripId, Integer dayId, Long currentUserId);
+
+  /** PDF document for the trip itinerary (title, dates, days, places). */
+  byte[] exportTripAsPdf(Long tripId);
 }

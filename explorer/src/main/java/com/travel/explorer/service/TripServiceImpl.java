@@ -31,6 +31,7 @@ import com.travel.explorer.repo.DayRepository;
 import com.travel.explorer.repo.PlaceRepo;
 import com.travel.explorer.repo.TripItineraryPlaceAdjustmentRepository;
 import com.travel.explorer.repo.TripRepo;
+import com.travel.explorer.repo.TripSpecifications;
 import com.travel.explorer.repo.UserActivityPreferenceRepository;
 import com.travel.explorer.repo.UserRepository;
 import jakarta.transaction.Transactional;
@@ -52,7 +53,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
+import org.hibernate.Hibernate;
 
 @Service
 public class TripServiceImpl implements TripService {
@@ -95,12 +98,27 @@ public class TripServiceImpl implements TripService {
   @Autowired
   private GoogleGeocodingService googleGeocodingService;
 
+  @Autowired
+  private TripPdfExportService tripPdfExportService;
+
   @Override
   public TripListResponce getAllTrips(
-      String sortBy, String sortOrder, Integer pageNumber, Integer pageSize) {
-    Page<Trip> tripPage = pagedTrips(null, sortBy, sortOrder, pageNumber, pageSize);
+      String sortBy,
+      String sortOrder,
+      Integer pageNumber,
+      Integer pageSize,
+      List<String> categoryCodes,
+      Long countryId,
+      String countryName) {
+    Page<Trip> tripPage =
+        pageGlobalTrips(
+            sortBy, sortOrder, pageNumber, pageSize, categoryCodes, countryId, countryName);
     if (tripPage.getContent().isEmpty()) {
-      throw new APIException("No trips created till now");
+      boolean filtered =
+          TripSpecifications.fromFilters(categoryCodes, countryId, countryName) != null;
+      if (!filtered) {
+        throw new APIException("No trips created till now");
+      }
     }
     return toTripListResponse(tripPage);
   }
@@ -112,43 +130,71 @@ public class TripServiceImpl implements TripService {
       String sortBy,
       String sortOrder,
       Integer pageNumber,
-      Integer pageSize) {
+      Integer pageSize,
+      List<String> categoryCodes,
+      Long countryId,
+      String countryName) {
     boolean ownerViewingSelf =
         viewerUserIdOrNull != null && viewerUserIdOrNull.equals(ownerUserId);
     Page<Trip> tripPage =
-        pagedTripsForOwner(ownerUserId, ownerViewingSelf, sortBy, sortOrder, pageNumber, pageSize);
+        pageOwnerTrips(
+            ownerUserId,
+            ownerViewingSelf,
+            sortBy,
+            sortOrder,
+            pageNumber,
+            pageSize,
+            categoryCodes,
+            countryId,
+            countryName);
     return toTripListResponse(tripPage);
   }
 
-  private Page<Trip> pagedTrips(
-      Long ownerUserIdOrNull, String sortBy, String sortOrder, Integer pageNumber, Integer pageSize) {
+  private Pageable buildTripPageable(
+      String sortBy, String sortOrder, Integer pageNumber, Integer pageSize) {
     Sort sortByAndOrder =
         sortOrder.equalsIgnoreCase("asc")
             ? Sort.by(sortBy).ascending()
             : Sort.by(sortBy).descending();
-    Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndOrder);
-    if (ownerUserIdOrNull == null) {
-      return tripRepo.findAll(pageDetails);
-    }
-    return tripRepo.findByOwner_UserId(ownerUserIdOrNull, pageDetails);
+    return PageRequest.of(pageNumber, pageSize, sortByAndOrder);
   }
 
-  private Page<Trip> pagedTripsForOwner(
+  private Page<Trip> pageGlobalTrips(
+      String sortBy,
+      String sortOrder,
+      Integer pageNumber,
+      Integer pageSize,
+      List<String> categoryCodes,
+      Long countryId,
+      String countryName) {
+    Pageable pageable = buildTripPageable(sortBy, sortOrder, pageNumber, pageSize);
+    Specification<Trip> filter =
+        TripSpecifications.fromFilters(categoryCodes, countryId, countryName);
+    if (filter == null) {
+      return tripRepo.findAll(pageable);
+    }
+    return tripRepo.findAll(filter, pageable);
+  }
+
+  private Page<Trip> pageOwnerTrips(
       Long ownerUserId,
       boolean includePrivate,
       String sortBy,
       String sortOrder,
       Integer pageNumber,
-      Integer pageSize) {
-    Sort sortByAndOrder =
-        sortOrder.equalsIgnoreCase("asc")
-            ? Sort.by(sortBy).ascending()
-            : Sort.by(sortBy).descending();
-    Pageable pageDetails = PageRequest.of(pageNumber, pageSize, sortByAndOrder);
-    if (includePrivate) {
-      return tripRepo.findByOwner_UserId(ownerUserId, pageDetails);
+      Integer pageSize,
+      List<String> categoryCodes,
+      Long countryId,
+      String countryName) {
+    Pageable pageable = buildTripPageable(sortBy, sortOrder, pageNumber, pageSize);
+    Specification<Trip> base = TripSpecifications.ownedByUser(ownerUserId);
+    if (!includePrivate) {
+      base = base.and(TripSpecifications.isPublicTrip());
     }
-    return tripRepo.findByOwner_UserIdAndIsPublicTrue(ownerUserId, pageDetails);
+    Specification<Trip> filter =
+        TripSpecifications.fromFilters(categoryCodes, countryId, countryName);
+    Specification<Trip> combined = filter != null ? base.and(filter) : base;
+    return tripRepo.findAll(combined, pageable);
   }
 
   private TripListResponce toTripListResponse(Page<Trip> tripPage) {
@@ -170,6 +216,7 @@ public class TripServiceImpl implements TripService {
     Trip trip = modelMapper.map(triRequest, Trip.class);
     trip.setCategories(
         triRequest.getCategories().stream().map(String::trim).distinct().toList());
+    trip.setIntensity(triRequest.getIntensity());
     if (trip.getIsPublic() == null) {
       trip.setIsPublic(true);
     }
@@ -287,6 +334,23 @@ public class TripServiceImpl implements TripService {
     ratingService.attachRatingSummaries(tripResponce);
     attachUserActivityPreferences(tripResponce, userId);
     return tripResponce;
+  }
+
+  @Override
+  @Transactional
+  public byte[] exportTripAsPdf(Long tripId) {
+    Trip trip =
+        tripRepo
+            .findById(tripId)
+            .orElseThrow(() -> new ResourceNotFoundException("Trip", "tripId", tripId));
+    Hibernate.initialize(trip.getDays());
+    for (Day d : trip.getDays()) {
+      Hibernate.initialize(d.getActivities());
+      for (Activity a : d.getActivities()) {
+        Hibernate.initialize(a.getPlaces());
+      }
+    }
+    return tripPdfExportService.buildTripPdf(trip);
   }
 
   @Override

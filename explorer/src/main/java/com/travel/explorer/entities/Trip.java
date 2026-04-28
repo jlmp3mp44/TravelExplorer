@@ -5,6 +5,8 @@ import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -59,6 +61,11 @@ public class Trip {
   @Column(name= "budget")
   @NotNull
   private Integer budget;
+
+  /** Pace / density chosen when creating the trip (optional until clients send it). */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "trip_intensity", length = 16)
+  private TripIntensity intensity;
 
   /** When true, the itinerary is visible to others; each user can still keep personal activity overrides. */
   @Column(name = "is_public", nullable = false)

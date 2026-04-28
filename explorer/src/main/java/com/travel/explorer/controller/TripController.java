@@ -14,7 +14,9 @@ import com.travel.explorer.service.TripService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -44,15 +46,46 @@ public class TripController {
       @RequestParam(name = "pageNumber", defaultValue = AppConstants.PAGE_NUMBER, required = false) Integer pageNumber,
       @RequestParam(name = "pageSize", defaultValue = AppConstants.PAGE_SIZE, required = false) Integer pageSize,
       @RequestParam(name = "userId", required = false) Long userId,
+      @RequestParam(name = "categoryCodes", required = false) List<String> categoryCodes,
+      @RequestParam(name = "countryId", required = false) Long countryId,
+      @RequestParam(name = "countryName", required = false) String countryName,
       Authentication authentication) {
     if (userId != null) {
       Long viewerId = currentUserId(authentication);
       TripListResponce list =
-          tripService.getTripsForOwner(userId, viewerId, sortBy, sortOrder, pageNumber, pageSize);
+          tripService.getTripsForOwner(
+              userId,
+              viewerId,
+              sortBy,
+              sortOrder,
+              pageNumber,
+              pageSize,
+              categoryCodes,
+              countryId,
+              countryName);
       return new ResponseEntity<>(list, HttpStatus.OK);
     }
     return new ResponseEntity<>(
-        tripService.getAllTrips(sortBy, sortOrder, pageNumber, pageSize), HttpStatus.OK);
+        tripService.getAllTrips(
+            sortBy,
+            sortOrder,
+            pageNumber,
+            pageSize,
+            categoryCodes,
+            countryId,
+            countryName),
+        HttpStatus.OK);
+  }
+
+  @GetMapping(value = "{tripId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+  public ResponseEntity<byte[]> downloadTripPdf(@PathVariable Long tripId) {
+    byte[] pdf = tripService.exportTripAsPdf(tripId);
+    return ResponseEntity.ok()
+        .header(
+            HttpHeaders.CONTENT_DISPOSITION,
+            "attachment; filename=\"trip-" + tripId + ".pdf\"")
+        .contentType(MediaType.APPLICATION_PDF)
+        .body(pdf);
   }
 
   @GetMapping("{tripId}")

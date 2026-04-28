@@ -4,10 +4,12 @@ import com.travel.explorer.entities.Trip;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface TripRepo  extends JpaRepository<Trip, Long> {
+public interface TripRepo
+    extends JpaRepository<Trip, Long>, JpaSpecificationExecutor<Trip> {
 
   /** Trips whose {@code owner.userId} matches; empty page if none (e.g. legacy rows without owner). */
   Page<Trip> findByOwner_UserId(Long ownerUserId, Pageable pageable);
