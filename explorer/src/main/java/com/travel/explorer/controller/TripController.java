@@ -3,7 +3,9 @@ package com.travel.explorer.controller;
 import com.travel.explorer.config.AppConstants;
 import com.travel.explorer.payload.rating.RatingRequest;
 import com.travel.explorer.payload.trip.ActivityManualEditRequest;
-import com.travel.explorer.payload.trip.ReplaceActivityRequest;
+import com.travel.explorer.payload.place.PlaceResponse;
+import com.travel.explorer.payload.trip.ReplaceActivitySmartRequest;
+import com.travel.explorer.payload.trip.ReplaceActivityWithPlaceRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
@@ -129,12 +131,37 @@ public class TripController {
     return new ResponseEntity<>(updated, HttpStatus.OK);
   }
 
-  @PostMapping("{tripId}/activities/{activityId}/replace")
-  public ResponseEntity<TripResponce> replaceActivityWithMockPlace(
+  @GetMapping("{tripId}/places/search")
+  public ResponseEntity<List<PlaceResponse>> searchTripPlaces(
+      @PathVariable Long tripId,
+      @RequestParam("q") String query,
+      Authentication authentication) {
+    List<PlaceResponse> places =
+        tripService.searchTripPlaces(tripId, query, currentUserId(authentication));
+    return new ResponseEntity<>(places, HttpStatus.OK);
+  }
+
+  @PostMapping("{tripId}/activities/{activityId}/replace-smart")
+  public ResponseEntity<TripResponce> replaceActivitySmart(
       @PathVariable Long tripId,
       @PathVariable Long activityId,
-      @Valid @RequestBody ReplaceActivityRequest request) {
-    TripResponce updated = tripService.replaceActivityWithMockPlace(tripId, activityId, request);
+      @RequestBody(required = false) ReplaceActivitySmartRequest request,
+      Authentication authentication) {
+    TripResponce updated =
+        tripService.replaceActivitySmart(
+            tripId, activityId, request != null ? request : new ReplaceActivitySmartRequest(), currentUserId(authentication));
+    return new ResponseEntity<>(updated, HttpStatus.OK);
+  }
+
+  @PostMapping("{tripId}/activities/{activityId}/replace-with-place")
+  public ResponseEntity<TripResponce> replaceActivityWithPlace(
+      @PathVariable Long tripId,
+      @PathVariable Long activityId,
+      @Valid @RequestBody ReplaceActivityWithPlaceRequest request,
+      Authentication authentication) {
+    TripResponce updated =
+        tripService.replaceActivityWithPlace(
+            tripId, activityId, request, currentUserId(authentication));
     return new ResponseEntity<>(updated, HttpStatus.OK);
   }
 

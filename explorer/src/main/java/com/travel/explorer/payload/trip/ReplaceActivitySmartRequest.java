@@ -1,7 +1,6 @@
 package com.travel.explorer.payload.trip;
 
 import com.travel.explorer.entities.ActivityChangeReason;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -9,9 +8,8 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ReplaceActivityRequest {
+public class ReplaceActivitySmartRequest {
 
-  @NotNull private Long userId;
-
-  @NotNull private ActivityChangeReason reason;
+  /** Optional audit reason; defaults when null. */
+  private ActivityChangeReason reason;
 }

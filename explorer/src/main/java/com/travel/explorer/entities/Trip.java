@@ -94,6 +94,18 @@ public class Trip {
   @OneToMany(mappedBy = "trip", cascade = CascadeType.ALL, orphanRemoval = true)
   private List<Day> days = new ArrayList<>();
 
+  /**
+   * Place ids produced at itinerary build time, ranked, that were not scheduled into any activity
+   * (pool for same-category / smart swaps).
+   */
+  @ElementCollection
+  @CollectionTable(
+      name = "trip_itinerary_reserve_place_ids",
+      joinColumns = @JoinColumn(name = "trip_id"))
+  @OrderColumn(name = "reserve_sort_idx")
+  @Column(name = "place_id")
+  private List<Long> itineraryReservePlaceIds = new ArrayList<>();
+
   public Set<Country> getCountries() {
     return cities.stream()
         .map(City::getCountry)

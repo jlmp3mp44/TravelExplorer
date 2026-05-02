@@ -36,6 +36,18 @@ public class PlaceRecommendationService {
 
   public List<Place> rankPlaces(
       List<Place> places, List<String> selectedCategoryCodes, Long userId) {
+    return rankPlaces(places, selectedCategoryCodes, userId, null);
+  }
+
+  /**
+   * @param replacementCategoryFocus optional normalized category / type names to favor when
+   *     replacing an activity (same-category swaps).
+   */
+  public List<Place> rankPlaces(
+      List<Place> places,
+      List<String> selectedCategoryCodes,
+      Long userId,
+      Set<String> replacementCategoryFocus) {
     if (places == null || places.isEmpty()) {
       return List.of();
     }
@@ -64,7 +76,9 @@ public class PlaceRecommendationService {
     Map<Place, Double> contentScores = new HashMap<>(openPlaces.size());
     List<Long> placeIdsForSvd = new ArrayList<>();
     for (Place place : openPlaces) {
-      contentScores.put(place, contentBasedScorer.score(place, selected));
+      contentScores.put(
+          place,
+          contentBasedScorer.scoreWithReplacementFocus(place, selected, replacementCategoryFocus));
       if (place.getId() != null) {
         placeIdsForSvd.add(place.getId());
       }

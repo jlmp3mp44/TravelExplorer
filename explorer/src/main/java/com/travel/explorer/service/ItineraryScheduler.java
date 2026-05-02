@@ -38,8 +38,8 @@ public class ItineraryScheduler {
 
         List<Day> days = new ArrayList<>();
         double runningCost = 0.0;
-        Set<Long> usedPlaceIds = new HashSet<>();
-        Set<String> usedPlaceKeys = new HashSet<>();
+        Set<Long> usedPlaceIds = new LinkedHashSet<>();
+        Set<String> usedPlaceKeys = new LinkedHashSet<>();
 
         for (LocalDate date = trip.getStartDate(); !date.isAfter(trip.getEndDate()); date = date.plusDays(1)) {
             Day day = new Day();
@@ -119,7 +119,7 @@ public class ItineraryScheduler {
             days.add(day);
         }
 
-        return new ScheduleResult(days, runningCost);
+        return new ScheduleResult(days, runningCost, usedPlaceIds, usedPlaceKeys);
     }
 
     /** Check if a place is likely open during [startMin, endMin) on the given date. */
@@ -178,5 +178,9 @@ public class ItineraryScheduler {
         return null;
     }
 
-    public record ScheduleResult(List<Day> days, double totalEstimatedCost) {}
+    public record ScheduleResult(
+        List<Day> days,
+        double totalEstimatedCost,
+        Set<Long> usedPlaceIds,
+        Set<String> usedPlaceKeys) {}
 }

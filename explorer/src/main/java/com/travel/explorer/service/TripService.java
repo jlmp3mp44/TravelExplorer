@@ -1,7 +1,9 @@
 package com.travel.explorer.service;
 
+import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.payload.trip.ActivityManualEditRequest;
-import com.travel.explorer.payload.trip.ReplaceActivityRequest;
+import com.travel.explorer.payload.trip.ReplaceActivitySmartRequest;
+import com.travel.explorer.payload.trip.ReplaceActivityWithPlaceRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripUpdateRequest;
@@ -56,11 +58,20 @@ public interface TripService {
   TripResponce reorderDayActivities(Long tripId, Integer dayId, List<Long> orderedActivityIds);
 
   /**
-   * Replaces an activity's places with a mock substitute (first place in DB). Intended to be swapped for real
-   * recommendation logic later.
+   * Scoped Google text search for manual place pick; results are persisted in {@code places}.
    */
-  TripResponce replaceActivityWithMockPlace(
-      Long tripId, Long activityId, ReplaceActivityRequest request);
+  List<PlaceResponse> searchTripPlaces(Long tripId, String query, Long currentUserId);
+
+  /**
+   * Swaps the activity's place using the itinerary reserve pool, re-ranked candidates, and extra
+   * weight for the replaced venue's categories.
+   */
+  TripResponce replaceActivitySmart(
+      Long tripId, Long activityId, ReplaceActivitySmartRequest request, Long currentUserId);
+
+  /** Sets the activity's place to an existing persisted place (e.g. user-selected search result). */
+  TripResponce replaceActivityWithPlace(
+      Long tripId, Long activityId, ReplaceActivityWithPlaceRequest request, Long currentUserId);
 
   /**
    * Deletes an activity from the trip and records {@link com.travel.explorer.entities.ActivityChangeReason}.
@@ -72,8 +83,8 @@ public interface TripService {
       Long currentUserId);
 
   /**
-   * Appends an activity on the given day using the first place in the DB as a mock (same pattern as
-   * {@link #replaceActivityWithMockPlace}). The new activity is marked {@code userAdded}.
+   * Appends an activity on the given day using the first place in the DB as a mock. The new
+   * activity is marked {@code userAdded}.
    */
   TripResponce addTripActivityWithMockPlace(Long tripId, Integer dayId, Long currentUserId);
 

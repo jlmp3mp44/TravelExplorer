@@ -16,8 +16,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Audit of manual itinerary edits (add/remove activity). Separate from {@link UserActivityPreference}
- * (replace flow).
+ * Audit of manual itinerary edits (add/remove/replace activity). Separate from {@link
+ * UserActivityPreference} (per-user public-trip overrides).
  */
 @Entity
 @Table(name = "trip_itinerary_place_adjustments")
@@ -53,4 +53,8 @@ public class TripItineraryPlaceAdjustment {
   /** For ADD: id of created activity. */
   @Column(name = "created_activity_id")
   private Long createdActivityId;
+
+  /** For {@link ItineraryAdjustmentKind#REPLACE}: activity whose primary place was swapped. */
+  @Column(name = "replaced_activity_id")
+  private Long replacedActivityId;
 }
