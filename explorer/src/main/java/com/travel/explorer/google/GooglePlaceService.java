@@ -3,7 +3,7 @@ package com.travel.explorer.google;
 import com.travel.explorer.entities.Place;
 import com.travel.explorer.google.request.Center;
 import com.travel.explorer.google.request.Circle;
-import com.travel.explorer.google.request.LocationRestriction;
+import com.travel.explorer.google.request.LocationBias;
 import com.travel.explorer.google.request.TextSearchRequest;
 import com.travel.explorer.google.response.GooglePlacesResponse;
 import com.travel.explorer.payload.place.GooglePlaceDto;
@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -34,6 +35,22 @@ public class GooglePlaceService {
   private static final int PAGE_SIZE = 20;
   private static final int MAX_PAGES = 5;
   private static final String LANGUAGE_UK = "uk";
+
+  /**
+   * {@code places:searchText} {@code locationBias.circle.radius} must be in [0, 50_000] meters
+   * (Google Places API New).
+   */
+  private static final int TEXT_SEARCH_MAX_CIRCLE_RADIUS_METERS = 50_000;
+
+  private static double clampTextSearchCircleRadiusMeters(double radiusMeters) {
+    if (radiusMeters < 0) {
+      return 0;
+    }
+    if (radiusMeters > TEXT_SEARCH_MAX_CIRCLE_RADIUS_METERS) {
+      return TEXT_SEARCH_MAX_CIRCLE_RADIUS_METERS;
+    }
+    return radiusMeters;
+  }
 
   private final GooglePlaceClient client;
   private final GooglePlaceMapper mapper;
@@ -66,6 +83,60 @@ public class GooglePlaceService {
    * @param includedTypes  list of Google Place types (one API call per type, in parallel)
    * @return deduplicated list of Place entities (from DB cache + freshly fetched)
    */
+  /**
+   * Free-text search (user-typed name) restricted to a circle. Persists new places to the database.
+   */
+  public List<Place> searchByFreeText(
+      String query, double latitude, double longitude, int radiusMeters) {
+    if (query == null || query.isBlank()) {
+      return List.of();
+    }
+    double r = clampTextSearchCircleRadiusMeters(radiusMeters);
+    if (r != radiusMeters) {
+      log.debug(
+          "Text search circle radius clamped from {}m to {}m (API max {})",
+          radiusMeters,
+          r,
+          TEXT_SEARCH_MAX_CIRCLE_RADIUS_METERS);
+    }
+    TextSearchRequest request =
+        new TextSearchRequest(
+            query.trim(),
+            null,
+            new LocationBias(new Circle(new Center(latitude, longitude), r)),
+            LANGUAGE_UK,
+            PAGE_SIZE,
+            null,
+            null);
+
+    GooglePlacesResponse response = client.searchTextFull(request);
+    if (response == null || response.getPlaces() == null || response.getPlaces().isEmpty()) {
+      return List.of();
+    }
+
+    List<Place> out = new ArrayList<>();
+    for (GooglePlaceDto dto : response.getPlaces()) {
+      if (dto.getGooglePlaceId() == null || dto.getGooglePlaceId().isBlank()) {
+        continue;
+      }
+      Optional<Place> existing = placeRepo.findByGooglePlaceId(dto.getGooglePlaceId());
+      if (existing.isPresent()) {
+        out.add(existing.get());
+        continue;
+      }
+      try {
+        Place place = mapper.toPlace(dto);
+        out.add(placeRepo.save(place));
+      } catch (Exception e) {
+        log.warn(
+            "Failed to persist place from text search {}: {}",
+            dto.getGooglePlaceId(),
+            e.getMessage());
+      }
+    }
+    return out;
+  }
+
   public List<Place> searchByCategories(
       double latitude, double longitude, double radius, List<String> includedTypes) {
 
@@ -140,11 +211,12 @@ public class GooglePlaceService {
     Set<String> ids = new LinkedHashSet<>();
     String pageToken = null;
 
+    double clampedRadius = clampTextSearchCircleRadiusMeters(radius);
     for (int page = 0; page < MAX_PAGES; page++) {
       TextSearchRequest request = new TextSearchRequest(
           type,
           type,
-          new LocationRestriction(new Circle(new Center(lat, lng), radius)),
+          new LocationBias(new Circle(new Center(lat, lng), clampedRadius)),
           LANGUAGE_UK,
           PAGE_SIZE,
           pageToken,

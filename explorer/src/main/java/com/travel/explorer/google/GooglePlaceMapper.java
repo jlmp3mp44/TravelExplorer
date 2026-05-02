@@ -30,6 +30,11 @@ public class GooglePlaceMapper {
         new PropertyMap<GooglePlaceDto, Place>() {
           @Override
           protected void configure() {
+            // Default tokenized matching can pair googlePlaceId with id (both contain "id"),
+            // then NumberConverter fails on values like "ChIJ…".
+            skip(destination.getId());
+            skip(destination.getLocation());
+            skip(destination.getCategories());
             map().setTitle(source.getDisplayName().getText());
             map().setAddress(source.getFormattedAddress());
             map().setPrimaryType(source.getPrimaryType());

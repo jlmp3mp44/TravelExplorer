@@ -2,6 +2,7 @@ package com.travel.explorer.service;
 
 import com.travel.explorer.entities.Activity;
 import com.travel.explorer.entities.ActivityChangeReason;
+import com.travel.explorer.entities.Category;
 import com.travel.explorer.entities.City;
 import com.travel.explorer.entities.Day;
 import com.travel.explorer.entities.ItineraryAdjustmentKind;
@@ -12,6 +13,7 @@ import com.travel.explorer.entities.User;
 import com.travel.explorer.entities.UserActivityPreference;
 import com.travel.explorer.excpetions.APIException;
 import com.travel.explorer.excpetions.ResourceNotFoundException;
+import com.travel.explorer.google.GooglePlaceService;
 import com.travel.explorer.google.geocode.GoogleGeocodingService;
 import com.travel.explorer.google.geocode.LatLng;
 import com.travel.explorer.payload.ActivityResponse;
@@ -19,7 +21,8 @@ import com.travel.explorer.payload.ActivityUserPreferenceResponse;
 import com.travel.explorer.payload.DayResponse;
 import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.payload.trip.ActivityManualEditRequest;
-import com.travel.explorer.payload.trip.ReplaceActivityRequest;
+import com.travel.explorer.payload.trip.ReplaceActivitySmartRequest;
+import com.travel.explorer.payload.trip.ReplaceActivityWithPlaceRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
@@ -33,14 +36,17 @@ import com.travel.explorer.repo.TripRepo;
 import com.travel.explorer.repo.TripSpecifications;
 import com.travel.explorer.repo.UserActivityPreferenceRepository;
 import com.travel.explorer.repo.UserRepository;
+import com.travel.explorer.service.scheduling.HaversineUtil;
 import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
+import java.util.Optional;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -91,6 +97,9 @@ public class TripServiceImpl implements TripService {
 
   @Autowired
   private GoogleGeocodingService googleGeocodingService;
+
+  @Autowired
+  private GooglePlaceService googlePlaceService;
 
   @Autowired
   private PlaceRecommendationService placeRecommendationService;
@@ -407,8 +416,26 @@ public class TripServiceImpl implements TripService {
 
   @Override
   @Transactional
-  public TripResponce replaceActivityWithMockPlace(
-      Long tripId, Long activityId, ReplaceActivityRequest request) {
+  public List<PlaceResponse> searchTripPlaces(Long tripId, String query, Long currentUserId) {
+    if (query == null || query.isBlank()) {
+      throw new APIException("query is required");
+    }
+    Trip trip =
+        tripRepo
+            .findById(tripId)
+            .orElseThrow(() -> new ResourceNotFoundException("Trip", "tripId", tripId));
+    assertTripAccess(trip, currentUserId);
+    TripSearchGeo geo = resolveTripSearchGeo(trip);
+    List<Place> found =
+        googlePlaceService.searchByFreeText(
+            query.trim(), geo.center().latitude(), geo.center().longitude(), geo.radiusMeters());
+    return found.stream().map(p -> modelMapper.map(p, PlaceResponse.class)).toList();
+  }
+
+  @Override
+  @Transactional
+  public TripResponce replaceActivitySmart(
+      Long tripId, Long activityId, ReplaceActivitySmartRequest request, Long currentUserId) {
     Activity activity =
         activityRepository
             .findById(activityId)
@@ -418,34 +445,56 @@ public class TripServiceImpl implements TripService {
         || !activity.getDay().getTrip().getId().equals(tripId)) {
       throw new APIException("Activity does not belong to this trip");
     }
+    Trip trip = activity.getDay().getTrip();
+    assertTripAccess(trip, currentUserId);
 
-    User user =
-        userRepository
-            .findById(request.getUserId())
-            .orElseThrow(() -> new ResourceNotFoundException("User", "userId", request.getUserId()));
+    ActivityChangeReason reason =
+        request != null && request.getReason() != null
+            ? request.getReason()
+            : ActivityChangeReason.DONT_WANT_TO_GO;
 
-    Page<Place> placePage = placeRepo.findAll(PageRequest.of(0, 1));
-    if (placePage.isEmpty()) {
-      throw new APIException(
-          "No places in the database to use as a replacement (mock will be replaced later)");
+    Optional<Place> chosen =
+        pickSmartReplacementPlace(activity, trip, trip.getOwner() != null ? trip.getOwner().getUserId() : null);
+    if (chosen.isEmpty()) {
+      throw new APIException("No suitable replacement place found for this activity");
     }
-    Place mockPlace = placePage.getContent().get(0);
+    applyActivityPlaceSwap(activity, trip, chosen.get(), currentUserId, reason);
+    activityRepository.save(activity);
+    tripRepo.save(trip);
+    return getTripById(tripId, currentUserId);
+  }
 
-    UserActivityPreference pref =
-        userActivityPreferenceRepository
-            .findByUser_UserIdAndActivity_Id(request.getUserId(), activityId)
-            .orElseGet(
-                () -> {
-                  UserActivityPreference p = new UserActivityPreference();
-                  p.setUser(user);
-                  p.setActivity(activity);
-                  return p;
-                });
-    pref.setChangeReason(request.getReason());
-    pref.setReplacementPlace(mockPlace);
-    userActivityPreferenceRepository.save(pref);
+  @Override
+  @Transactional
+  public TripResponce replaceActivityWithPlace(
+      Long tripId,
+      Long activityId,
+      ReplaceActivityWithPlaceRequest request,
+      Long currentUserId) {
+    Activity activity =
+        activityRepository
+            .findById(activityId)
+            .orElseThrow(() -> new ResourceNotFoundException("Activity", "activityId", activityId));
+    if (activity.getDay() == null
+        || activity.getDay().getTrip() == null
+        || !activity.getDay().getTrip().getId().equals(tripId)) {
+      throw new APIException("Activity does not belong to this trip");
+    }
+    Trip trip = activity.getDay().getTrip();
+    assertTripAccess(trip, currentUserId);
 
-    return getTripById(tripId, request.getUserId());
+    Place place =
+        placeRepo
+            .findById(request.getPlaceId())
+            .orElseThrow(() -> new ResourceNotFoundException("Place", "placeId", request.getPlaceId()));
+
+    ActivityChangeReason reason =
+        request.getReason() != null ? request.getReason() : ActivityChangeReason.DONT_WANT_TO_GO;
+
+    applyActivityPlaceSwap(activity, trip, place, currentUserId, reason);
+    activityRepository.save(activity);
+    tripRepo.save(trip);
+    return getTripById(tripId, currentUserId);
   }
 
   @Override
@@ -475,6 +524,7 @@ public class TripServiceImpl implements TripService {
         ItineraryAdjustmentKind.REMOVE,
         request.getReason(),
         removedId,
+        null,
         null);
 
     day.getActivities().remove(activity);
@@ -527,7 +577,8 @@ public class TripServiceImpl implements TripService {
       ItineraryAdjustmentKind kind,
       ActivityChangeReason reason,
       Long removedActivityId,
-      Long createdActivityId) {
+      Long createdActivityId,
+      Long replacedActivityId) {
     TripItineraryPlaceAdjustment row = new TripItineraryPlaceAdjustment();
     row.setTrip(trip);
     User user = null;
@@ -542,6 +593,7 @@ public class TripServiceImpl implements TripService {
     row.setReason(reason);
     row.setRemovedActivityId(removedActivityId);
     row.setCreatedActivityId(createdActivityId);
+    row.setReplacedActivityId(replacedActivityId);
     tripItineraryPlaceAdjustmentRepository.save(row);
   }
 
@@ -594,15 +646,22 @@ public class TripServiceImpl implements TripService {
   }
 
   private String resolveGeocodeAddress(Trip trip) {
-    if (trip.getCities() == null || trip.getCities().isEmpty()) {
-      throw new APIException(
-          "Trip has no cities; set cityIds before regenerating the itinerary");
+    if (trip.getCities() != null && !trip.getCities().isEmpty()) {
+      City primary =
+          trip.getCities().stream()
+              .min(Comparator.comparing(City::getId))
+              .orElseThrow();
+      return buildGeocodeAddressFromCity(primary);
     }
-    City primary =
-        trip.getCities().stream()
-            .min(Comparator.comparing(City::getId))
-            .orElseThrow();
-    return buildGeocodeAddressFromCity(primary);
+    String fromPlaces = firstPlaceAddressOnTrip(trip);
+    if (fromPlaces != null && !fromPlaces.isBlank()) {
+      return fromPlaces.trim();
+    }
+    if (trip.getTitle() != null && !trip.getTitle().isBlank()) {
+      return trip.getTitle().trim();
+    }
+    throw new APIException(
+        "Trip has no cities; set cityIds on the trip or ensure itinerary places have addresses.");
   }
 
   private void fillItineraryFromNearbySearch(Trip trip, String geocodeAddress, Long ownerUserId) {
@@ -650,6 +709,17 @@ public class TripServiceImpl implements TripService {
         trip, savedPlaces, budgetService, trip.getBudget());
 
     trip.getDays().addAll(result.days());
+
+    if (trip.getItineraryReservePlaceIds() == null) {
+      trip.setItineraryReservePlaceIds(new ArrayList<>());
+    } else {
+      trip.getItineraryReservePlaceIds().clear();
+    }
+    for (Place p : savedPlaces) {
+      if (p.getId() != null && !result.usedPlaceIds().contains(p.getId())) {
+        trip.getItineraryReservePlaceIds().add(p.getId());
+      }
+    }
   }
 
   private String generateTripTitle(Trip trip, TriRequest triRequest) {
@@ -806,6 +876,310 @@ public class TripServiceImpl implements TripService {
       return countryPart;
     }
     return cityPart;
+  }
+
+  private record TripSearchGeo(LatLng center, int radiusMeters) {}
+
+  /**
+   * Uses trip cities when present; otherwise derives center/radius from itinerary place coordinates
+   * (trips created with free-text city/country often have no {@link Trip#getCities()} rows).
+   */
+  private TripSearchGeo resolveTripSearchGeo(Trip trip) {
+    if (trip.getCities() != null && !trip.getCities().isEmpty()) {
+      List<City> cities = new ArrayList<>(trip.getCities());
+      if (cities.size() == 1) {
+        LatLng c =
+            googleGeocodingService.geocodeToLatLng(buildGeocodeAddressFromCity(cities.get(0)));
+        return new TripSearchGeo(c, 40_000);
+      }
+      Set<Long> countryIds =
+          cities.stream()
+              .filter(ct -> ct.getCountry() != null && ct.getCountry().getId() != null)
+              .map(ct -> ct.getCountry().getId())
+              .collect(Collectors.toSet());
+      if (countryIds.size() != 1) {
+        throw new APIException(
+            "Place search is only supported for trips in a single country when multiple cities are selected");
+      }
+      List<LatLng> points = new ArrayList<>();
+      for (City city : cities) {
+        points.add(googleGeocodingService.geocodeToLatLng(buildGeocodeAddressFromCity(city)));
+      }
+      return tripSearchGeoFromLatLngPoints(points);
+    }
+    List<LatLng> fromItinerary = collectLatLngsFromTripPlaces(trip);
+    if (fromItinerary.isEmpty()) {
+      throw new APIException(
+          "Trip has no cities and no coordinates on itinerary places; set cityIds on the trip or add stops with map locations.");
+    }
+    return tripSearchGeoFromLatLngPoints(fromItinerary);
+  }
+
+  private static TripSearchGeo tripSearchGeoFromLatLngPoints(List<LatLng> points) {
+    if (points.isEmpty()) {
+      throw new IllegalArgumentException("points must not be empty");
+    }
+    if (points.size() == 1) {
+      return new TripSearchGeo(points.get(0), 40_000);
+    }
+    double sumLat = points.stream().mapToDouble(LatLng::latitude).sum();
+    double sumLng = points.stream().mapToDouble(LatLng::longitude).sum();
+    LatLng center = new LatLng(sumLat / points.size(), sumLng / points.size());
+    double maxKm = 0;
+    for (LatLng p : points) {
+      maxKm =
+          Math.max(
+              maxKm,
+              HaversineUtil.distanceKm(
+                  center.latitude(), center.longitude(), p.latitude(), p.longitude()));
+    }
+    int radiusMeters = (int) Math.min(500_000, Math.max(80_000, maxKm * 1000 * 1.4 + 50_000));
+    return new TripSearchGeo(center, radiusMeters);
+  }
+
+  private static List<LatLng> collectLatLngsFromTripPlaces(Trip trip) {
+    List<LatLng> out = new ArrayList<>();
+    if (trip.getDays() == null) {
+      return out;
+    }
+    for (Day d : trip.getDays()) {
+      if (d.getActivities() == null) {
+        continue;
+      }
+      for (Activity a : d.getActivities()) {
+        if (a.getPlaces() == null) {
+          continue;
+        }
+        for (Place p : a.getPlaces()) {
+          if (p.getLocation() == null) {
+            continue;
+          }
+          out.add(new LatLng(p.getLocation().getLat(), p.getLocation().getLng()));
+        }
+      }
+    }
+    return out;
+  }
+
+  private static String firstPlaceAddressOnTrip(Trip trip) {
+    if (trip.getDays() == null) {
+      return null;
+    }
+    for (Day d : trip.getDays()) {
+      if (d.getActivities() == null) {
+        continue;
+      }
+      for (Activity a : d.getActivities()) {
+        if (a.getPlaces() == null) {
+          continue;
+        }
+        for (Place p : a.getPlaces()) {
+          if (p.getAddress() != null && !p.getAddress().isBlank()) {
+            return p.getAddress();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private Set<String> normalizedCategoriesFromPlace(Place place) {
+    Set<String> out = new LinkedHashSet<>();
+    if (place == null) {
+      return out;
+    }
+    if (place.getPrimaryType() != null) {
+      String n = normalizeCategoryToken(place.getPrimaryType());
+      if (n != null) {
+        out.add(n);
+      }
+    }
+    if (place.getCategories() != null) {
+      for (Category c : place.getCategories()) {
+        if (c == null || c.getName() == null) {
+          continue;
+        }
+        String n = normalizeCategoryToken(c.getName());
+        if (n != null) {
+          out.add(n);
+        }
+      }
+    }
+    return out;
+  }
+
+  private static String normalizeCategoryToken(String raw) {
+    if (raw == null) {
+      return null;
+    }
+    String t = raw.trim().toLowerCase(Locale.ROOT);
+    return t.isEmpty() ? null : t;
+  }
+
+  private boolean matchesCategoryFocus(Place place, Set<String> focus) {
+    if (focus == null || focus.isEmpty()) {
+      return false;
+    }
+    Set<String> placeCats = normalizedCategoriesFromPlace(place);
+    for (String f : focus) {
+      if (placeCats.contains(f)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private Set<Long> collectUsedPlaceIdsExcept(Trip trip, Long excludeActivityId) {
+    Set<Long> used = new HashSet<>();
+    if (trip.getDays() == null) {
+      return used;
+    }
+    for (Day d : trip.getDays()) {
+      if (d.getActivities() == null) {
+        continue;
+      }
+      for (Activity a : d.getActivities()) {
+        if (excludeActivityId != null && excludeActivityId.equals(a.getId())) {
+          continue;
+        }
+        if (a.getPlaces() == null) {
+          continue;
+        }
+        for (Place p : a.getPlaces()) {
+          if (p.getId() != null) {
+            used.add(p.getId());
+          }
+        }
+      }
+    }
+    return used;
+  }
+
+  private Optional<Place> pickSmartReplacementPlace(Activity activity, Trip trip, Long ownerUserId) {
+    Place currentPlace =
+        activity.getPlaces() == null || activity.getPlaces().isEmpty()
+            ? null
+            : activity.getPlaces().get(0);
+    Set<String> focus =
+        currentPlace == null ? Set.of() : normalizedCategoriesFromPlace(currentPlace);
+    Set<Long> used = collectUsedPlaceIdsExcept(trip, activity.getId());
+
+    List<Long> reserve = trip.getItineraryReservePlaceIds();
+    if (reserve != null) {
+      for (Long pid : reserve) {
+        if (pid == null || used.contains(pid)) {
+          continue;
+        }
+        Place p = placeRepo.findById(pid).orElse(null);
+        if (p == null) {
+          continue;
+        }
+        if (!focus.isEmpty() && matchesCategoryFocus(p, focus)) {
+          return Optional.of(p);
+        }
+      }
+      for (Long pid : reserve) {
+        if (pid == null || used.contains(pid)) {
+          continue;
+        }
+        Optional<Place> p = placeRepo.findById(pid);
+        if (p.isPresent()) {
+          return p;
+        }
+      }
+    }
+
+    String geocodeAddress = resolveGeocodeAddress(trip);
+    LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
+    double radius = 10000.0;
+    List<String> searchTypes = new ArrayList<>(new LinkedHashSet<>(trip.getCategories()));
+    if (searchTypes.isEmpty()) {
+      return Optional.empty();
+    }
+    List<Place> candidates =
+        placeCandidateAggregator.aggregateCandidates(
+            center.latitude(), center.longitude(), radius, searchTypes);
+
+    LinkedHashMap<Long, Place> byId = new LinkedHashMap<>();
+    for (Place c : candidates) {
+      if (c.getId() != null) {
+        byId.put(c.getId(), c);
+      }
+    }
+    if (reserve != null) {
+      for (Long pid : reserve) {
+        if (pid != null && !byId.containsKey(pid)) {
+          placeRepo.findById(pid).ifPresent(p -> byId.put(p.getId(), p));
+        }
+      }
+    }
+
+    List<Place> merged = new ArrayList<>(byId.values());
+    List<Place> ranked =
+        placeRecommendationService.rankPlaces(
+            merged, searchTypes, ownerUserId, focus.isEmpty() ? null : focus);
+
+    for (Place p : ranked) {
+      if (p.getId() == null || used.contains(p.getId())) {
+        continue;
+      }
+      if (!focus.isEmpty() && matchesCategoryFocus(p, focus)) {
+        return placeRepo.findById(p.getId());
+      }
+    }
+    for (Place p : ranked) {
+      if (p.getId() != null && !used.contains(p.getId())) {
+        return placeRepo.findById(p.getId());
+      }
+    }
+    return Optional.empty();
+  }
+
+  private void removePlaceIdFromTripReserve(Trip trip, Long placeId) {
+    if (placeId == null || trip.getItineraryReservePlaceIds() == null) {
+      return;
+    }
+    trip.getItineraryReservePlaceIds().removeIf(id -> id != null && id.equals(placeId));
+  }
+
+  private void applyActivityPlaceSwap(
+      Activity activity,
+      Trip trip,
+      Place newPlace,
+      Long currentUserId,
+      ActivityChangeReason reason) {
+    Place oldPrimary =
+        activity.getPlaces() == null || activity.getPlaces().isEmpty()
+            ? null
+            : activity.getPlaces().get(0);
+    Long oldId = oldPrimary != null ? oldPrimary.getId() : null;
+
+    if (activity.getPlaces() == null) {
+      activity.setPlaces(new ArrayList<>());
+    } else {
+      activity.getPlaces().clear();
+    }
+    activity.getPlaces().add(newPlace);
+    activity.setUserAdded(true);
+
+    removePlaceIdFromTripReserve(trip, newPlace.getId());
+    if (oldId != null) {
+      if (trip.getItineraryReservePlaceIds() == null) {
+        trip.setItineraryReservePlaceIds(new ArrayList<>());
+      }
+      if (!trip.getItineraryReservePlaceIds().contains(oldId)) {
+        trip.getItineraryReservePlaceIds().add(oldId);
+      }
+    }
+
+    recordTripItineraryAdjustment(
+        trip,
+        currentUserId,
+        ItineraryAdjustmentKind.REPLACE,
+        reason,
+        null,
+        null,
+        activity.getId());
   }
 
   private static String buildGeocodeAddressFromCity(City city) {

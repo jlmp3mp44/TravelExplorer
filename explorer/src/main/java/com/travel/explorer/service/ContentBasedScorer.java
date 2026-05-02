@@ -28,6 +28,15 @@ public class ContentBasedScorer {
      * Higher is better. Normalized to roughly 0-500 range.
      */
     public double score(Place place, Set<String> selectedCategories) {
+        return scoreWithReplacementFocus(place, selectedCategories, null);
+    }
+
+    /**
+     * Like {@link #score(Place, Set)} but adds extra weight for categories / primary type in
+     * {@code replacementFocus} so replacements prefer the same kind of venue.
+     */
+    public double scoreWithReplacementFocus(
+        Place place, Set<String> selectedCategories, Set<String> replacementFocus) {
         Set<String> placeCategories = extractCategoryCodes(place);
         double score = relevanceScore(place, placeCategories, selectedCategories);
         score += qualityScore(place);
@@ -35,6 +44,22 @@ public class ContentBasedScorer {
         if (isBlank(place.getTitle())) score -= MISSING_TITLE_PENALTY;
         if (isBlank(place.getAddress())) score -= MISSING_ADDRESS_PENALTY;
         if (!selectedCategories.isEmpty() && placeCategories.isEmpty()) score -= MISSING_CATEGORY_PENALTY;
+        if (replacementFocus != null && !replacementFocus.isEmpty()) {
+            int boostHits = 0;
+            for (String focus : replacementFocus) {
+                if (focus == null) {
+                    continue;
+                }
+                if (placeCategories.contains(focus)) {
+                    boostHits++;
+                }
+                String prim = normalize(place.getPrimaryType());
+                if (prim != null && prim.equals(focus)) {
+                    boostHits++;
+                }
+            }
+            score += boostHits * 85.0;
+        }
         return score;
     }
 
