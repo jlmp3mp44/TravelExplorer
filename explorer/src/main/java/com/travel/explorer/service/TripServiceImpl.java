@@ -21,8 +21,10 @@ import com.travel.explorer.payload.ActivityUserPreferenceResponse;
 import com.travel.explorer.payload.DayResponse;
 import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.payload.trip.ActivityManualEditRequest;
+import com.travel.explorer.payload.trip.AddTripActivityRequest;
 import com.travel.explorer.payload.trip.ReplaceActivitySmartRequest;
 import com.travel.explorer.payload.trip.ReplaceActivityWithPlaceRequest;
+import com.travel.explorer.payload.trip.TripOwnerResponse;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripResponce;
@@ -227,6 +229,9 @@ public class TripServiceImpl implements TripService {
   @Override
   @Transactional
   public TripResponce saveTrip(TriRequest triRequest, Long ownerUserId) {
+    if (ownerUserId == null) {
+      throw new APIException("Sign in is required to create a trip");
+    }
 
     Trip trip = modelMapper.map(triRequest, Trip.class);
     trip.setCategories(
@@ -257,12 +262,11 @@ public class TripServiceImpl implements TripService {
 
     trip.setTitle(truncateTitle(generateTripTitle(trip, triRequest)));
 
-    if (ownerUserId != null) {
-      User owner = userRepository.findById(ownerUserId).orElse(null);
-      if (owner != null) {
-        trip.setOwner(owner);
-      }
+    User owner = userRepository.findById(ownerUserId).orElse(null);
+    if (owner == null) {
+      throw new APIException("User not found");
     }
+    trip.setOwner(owner);
 
     tripRepo.save(trip);
 
@@ -345,11 +349,12 @@ public class TripServiceImpl implements TripService {
   }
 
   @Override
-  public TripResponce getTripById(Long tripId, Long userId) {
+  public TripResponce getTripById(Long tripId, Long userId, Long viewerUserIdOrNull) {
     Trip tripFromDb =
         tripRepo
             .findById(tripId)
             .orElseThrow(() -> new ResourceNotFoundException("Trip", "tripId", tripId));
+    assertTripViewable(tripFromDb, viewerUserIdOrNull);
     TripResponce tripResponce = toResponse(tripFromDb);
     ratingService.attachRatingSummaries(tripResponce);
     attachUserActivityPreferences(tripResponce, userId);
@@ -358,11 +363,12 @@ public class TripServiceImpl implements TripService {
 
   @Override
   @Transactional
-  public byte[] exportTripAsPdf(Long tripId) {
+  public byte[] exportTripAsPdf(Long tripId, Long viewerUserIdOrNull) {
     Trip trip =
         tripRepo
             .findById(tripId)
             .orElseThrow(() -> new ResourceNotFoundException("Trip", "tripId", tripId));
+    assertTripViewable(trip, viewerUserIdOrNull);
     Hibernate.initialize(trip.getDays());
     for (Day d : trip.getDays()) {
       Hibernate.initialize(d.getActivities());
@@ -376,11 +382,12 @@ public class TripServiceImpl implements TripService {
   @Override
   @Transactional
   public TripResponce reorderDayActivities(
-      Long tripId, Integer dayId, List<Long> orderedActivityIds) {
+      Long tripId, Integer dayId, List<Long> orderedActivityIds, Long currentUserId) {
     Day day =
         dayRepository
             .findByIdAndTrip_Id(dayId, tripId)
             .orElseThrow(() -> new ResourceNotFoundException("Day", "dayId", dayId.longValue()));
+    assertTripAccess(day.getTrip(), currentUserId);
 
     Set<Long> expected =
         day.getActivities().stream().map(Activity::getId).collect(Collectors.toSet());
@@ -405,13 +412,7 @@ public class TripServiceImpl implements TripService {
     }
     activityRepository.saveAll(toSave);
 
-    Trip trip =
-        tripRepo
-            .findById(tripId)
-            .orElseThrow(() -> new ResourceNotFoundException("Trip", "tripId", tripId));
-    TripResponce tripResponce = toResponse(trip);
-    ratingService.attachRatingSummaries(tripResponce);
-    return tripResponce;
+    return getTripById(tripId, currentUserId, currentUserId);
   }
 
   @Override
@@ -461,7 +462,7 @@ public class TripServiceImpl implements TripService {
     applyActivityPlaceSwap(activity, trip, chosen.get(), currentUserId, reason);
     activityRepository.save(activity);
     tripRepo.save(trip);
-    return getTripById(tripId, currentUserId);
+    return getTripById(tripId, currentUserId, currentUserId);
   }
 
   @Override
@@ -494,7 +495,7 @@ public class TripServiceImpl implements TripService {
     applyActivityPlaceSwap(activity, trip, place, currentUserId, reason);
     activityRepository.save(activity);
     tripRepo.save(trip);
-    return getTripById(tripId, currentUserId);
+    return getTripById(tripId, currentUserId, currentUserId);
   }
 
   @Override
@@ -537,12 +538,13 @@ public class TripServiceImpl implements TripService {
     }
     activityRepository.saveAll(remaining);
 
-    return getTripById(tripId, currentUserId);
+    return getTripById(tripId, currentUserId, currentUserId);
   }
 
   @Override
   @Transactional
-  public TripResponce addTripActivityWithMockPlace(Long tripId, Integer dayId, Long currentUserId) {
+  public TripResponce addTripActivity(
+      Long tripId, Integer dayId, AddTripActivityRequest request, Long currentUserId) {
     Day day =
         dayRepository
             .findByIdAndTrip_Id(dayId, tripId)
@@ -550,12 +552,10 @@ public class TripServiceImpl implements TripService {
     Trip trip = day.getTrip();
     assertTripAccess(trip, currentUserId);
 
-    Page<Place> placePage = placeRepo.findAll(PageRequest.of(0, 1));
-    if (placePage.isEmpty()) {
-      throw new APIException(
-          "No places in the database to use as a replacement (mock will be replaced later)");
-    }
-    Place mockPlace = placePage.getContent().get(0);
+    Place place =
+        placeRepo
+            .findById(request.getPlaceId())
+            .orElseThrow(() -> new ResourceNotFoundException("Place", "placeId", request.getPlaceId()));
 
     int nextOrder =
         day.getActivities().stream().mapToInt(Activity::getSortOrder).max().orElse(-1) + 1;
@@ -564,11 +564,62 @@ public class TripServiceImpl implements TripService {
     activity.setSortOrder(nextOrder);
     activity.setDay(day);
     activity.setUserAdded(true);
-    activity.setPlaces(List.of(mockPlace));
+    activity.setPlaces(new ArrayList<>(List.of(place)));
     day.getActivities().add(activity);
     activityRepository.save(activity);
 
-    return getTripById(tripId, currentUserId);
+    removePlaceIdFromTripReserve(trip, place.getId());
+
+    recordTripItineraryAdjustment(
+        trip,
+        currentUserId,
+        ItineraryAdjustmentKind.ADD,
+        ActivityChangeReason.ADDED,
+        null,
+        activity.getId(),
+        null);
+
+    return getTripById(tripId, currentUserId, currentUserId);
+  }
+
+  @Override
+  @Transactional
+  public TripResponce addTripActivityAuto(Long tripId, Integer dayId, Long currentUserId) {
+    Day day =
+        dayRepository
+            .findByIdAndTrip_Id(dayId, tripId)
+            .orElseThrow(() -> new ResourceNotFoundException("Day", "dayId", dayId.longValue()));
+    Trip trip = day.getTrip();
+    assertTripAccess(trip, currentUserId);
+
+    Long ownerUserId = trip.getOwner() != null ? trip.getOwner().getUserId() : null;
+    Place chosen =
+        pickAutoPlaceForTrip(trip, ownerUserId)
+            .orElseThrow(() -> new APIException("No suitable place found to add for this trip"));
+
+    int nextOrder =
+        day.getActivities().stream().mapToInt(Activity::getSortOrder).max().orElse(-1) + 1;
+
+    Activity activity = new Activity();
+    activity.setSortOrder(nextOrder);
+    activity.setDay(day);
+    activity.setUserAdded(true);
+    activity.setPlaces(new ArrayList<>(List.of(chosen)));
+    day.getActivities().add(activity);
+    activityRepository.save(activity);
+
+    removePlaceIdFromTripReserve(trip, chosen.getId());
+
+    recordTripItineraryAdjustment(
+        trip,
+        currentUserId,
+        ItineraryAdjustmentKind.ADD,
+        ActivityChangeReason.ADDED,
+        null,
+        activity.getId(),
+        null);
+
+    return getTripById(tripId, currentUserId, currentUserId);
   }
 
   private void recordTripItineraryAdjustment(
@@ -600,7 +651,13 @@ public class TripServiceImpl implements TripService {
   private TripResponce toResponse(Trip trip) {
     TripResponce r = modelMapper.map(trip, TripResponce.class);
     if (trip.getOwner() != null) {
-      r.setOwnerId(trip.getOwner().getUserId());
+      User o = trip.getOwner();
+      r.setOwnerId(o.getUserId());
+      r.setOwnerProfile(
+          new TripOwnerResponse(o.getUserId(), o.getUsername(), o.getEmail(), o.getPhoneNumber()));
+    } else {
+      r.setOwnerId(null);
+      r.setOwnerProfile(null);
     }
     // Compute estimated budget from all places in the trip
     List<Place> allPlaces = new ArrayList<>();
@@ -629,6 +686,21 @@ public class TripServiceImpl implements TripService {
     if (currentUserId == null || !trip.getOwner().getUserId().equals(currentUserId)) {
       throw new APIException("Not allowed to modify this trip");
     }
+  }
+
+  /** Private trips are readable only by the owner; public trips are readable by anyone. */
+  private void assertTripViewable(Trip trip, Long viewerUserIdOrNull) {
+    if (trip.getIsPublic() == null || Boolean.TRUE.equals(trip.getIsPublic())) {
+      return;
+    }
+    if (trip.getOwner() == null) {
+      return;
+    }
+    if (viewerUserIdOrNull != null
+        && trip.getOwner().getUserId().equals(viewerUserIdOrNull)) {
+      return;
+    }
+    throw new APIException("Trip is private");
   }
 
   private void applyCityIds(Trip trip, List<Long> cityIds) {
@@ -1127,6 +1199,63 @@ public class TripServiceImpl implements TripService {
         return placeRepo.findById(p.getId());
       }
     }
+    for (Place p : ranked) {
+      if (p.getId() != null && !used.contains(p.getId())) {
+        return placeRepo.findById(p.getId());
+      }
+    }
+    return Optional.empty();
+  }
+
+  /**
+   * Picks a place for a new activity: reserve list first (unused), else aggregated + ranked
+   * candidates (same radius/categories as smart replace, no category-focus bias).
+   */
+  private Optional<Place> pickAutoPlaceForTrip(Trip trip, Long ownerUserId) {
+    Set<Long> used = collectUsedPlaceIdsExcept(trip, null);
+
+    List<Long> reserve = trip.getItineraryReservePlaceIds();
+    if (reserve != null) {
+      for (Long pid : reserve) {
+        if (pid == null || used.contains(pid)) {
+          continue;
+        }
+        Optional<Place> p = placeRepo.findById(pid);
+        if (p.isPresent()) {
+          return p;
+        }
+      }
+    }
+
+    String geocodeAddress = resolveGeocodeAddress(trip);
+    LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
+    double radius = 10000.0;
+    List<String> searchTypes = new ArrayList<>(new LinkedHashSet<>(trip.getCategories()));
+    if (searchTypes.isEmpty()) {
+      return Optional.empty();
+    }
+    List<Place> candidates =
+        placeCandidateAggregator.aggregateCandidates(
+            center.latitude(), center.longitude(), radius, searchTypes);
+
+    LinkedHashMap<Long, Place> byId = new LinkedHashMap<>();
+    for (Place c : candidates) {
+      if (c.getId() != null) {
+        byId.put(c.getId(), c);
+      }
+    }
+    if (reserve != null) {
+      for (Long pid : reserve) {
+        if (pid != null && !byId.containsKey(pid)) {
+          placeRepo.findById(pid).ifPresent(p -> byId.put(p.getId(), p));
+        }
+      }
+    }
+
+    List<Place> merged = new ArrayList<>(byId.values());
+    List<Place> ranked =
+        placeRecommendationService.rankPlaces(merged, searchTypes, ownerUserId, null);
+
     for (Place p : ranked) {
       if (p.getId() != null && !used.contains(p.getId())) {
         return placeRepo.findById(p.getId());

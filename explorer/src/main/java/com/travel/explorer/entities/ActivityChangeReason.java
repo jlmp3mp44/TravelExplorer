@@ -5,5 +5,7 @@ public enum ActivityChangeReason {
   /** User has already been to the suggested place. */
   WAS_HERE,
   /** User does not want to visit the suggested place. */
-  DONT_WANT_TO_GO
+  DONT_WANT_TO_GO,
+  /** New activity appended (audit for ADD kind; not a user-facing swap reason). */
+  ADDED
 }

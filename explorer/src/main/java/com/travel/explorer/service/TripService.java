@@ -4,6 +4,7 @@ import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.payload.trip.ActivityManualEditRequest;
 import com.travel.explorer.payload.trip.ReplaceActivitySmartRequest;
 import com.travel.explorer.payload.trip.ReplaceActivityWithPlaceRequest;
+import com.travel.explorer.payload.trip.AddTripActivityRequest;
 import com.travel.explorer.payload.trip.TriRequest;
 import com.travel.explorer.payload.trip.TripListResponce;
 import com.travel.explorer.payload.trip.TripUpdateRequest;
@@ -51,11 +52,13 @@ public interface TripService {
   /**
    * @param userId optional; when set, each activity may include {@code userPreference} for that user's
    *     overrides (shared public trips).
+   * @param viewerUserIdOrNull authenticated user id from cookie/JWT, or null; private trips are visible
+   *     only to the owner.
    */
-  TripResponce getTripById(Long tripId, Long userId);
+  TripResponce getTripById(Long tripId, Long userId, Long viewerUserIdOrNull);
 
   /** Sets {@code sortOrder} on each activity so it matches the given order (same day, full permutation). */
-  TripResponce reorderDayActivities(Long tripId, Integer dayId, List<Long> orderedActivityIds);
+  TripResponce reorderDayActivities(Long tripId, Integer dayId, List<Long> orderedActivityIds, Long currentUserId);
 
   /**
    * Scoped Google text search for manual place pick; results are persisted in {@code places}.
@@ -82,12 +85,16 @@ public interface TripService {
       ActivityManualEditRequest request,
       Long currentUserId);
 
+  /** Appends an activity on the given day with a chosen persisted place (same access rules as update). */
+  TripResponce addTripActivity(
+      Long tripId, Integer dayId, AddTripActivityRequest request, Long currentUserId);
+
   /**
-   * Appends an activity on the given day using the first place in the DB as a mock. The new
-   * activity is marked {@code userAdded}.
+   * Appends one activity on the given day using the same reserve + ranked-candidate pipeline as
+   * smart replace (no request body).
    */
-  TripResponce addTripActivityWithMockPlace(Long tripId, Integer dayId, Long currentUserId);
+  TripResponce addTripActivityAuto(Long tripId, Integer dayId, Long currentUserId);
 
   /** PDF document for the trip itinerary (title, dates, days, places). */
-  byte[] exportTripAsPdf(Long tripId);
+  byte[] exportTripAsPdf(Long tripId, Long viewerUserIdOrNull);
 }

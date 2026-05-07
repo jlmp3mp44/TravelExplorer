@@ -3,6 +3,7 @@ package com.travel.explorer.controller;
 import com.travel.explorer.config.AppConstants;
 import com.travel.explorer.payload.rating.RatingRequest;
 import com.travel.explorer.payload.trip.ActivityManualEditRequest;
+import com.travel.explorer.payload.trip.AddTripActivityRequest;
 import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.payload.trip.ReplaceActivitySmartRequest;
 import com.travel.explorer.payload.trip.ReplaceActivityWithPlaceRequest;
@@ -80,8 +81,9 @@ public class TripController {
   }
 
   @GetMapping(value = "{tripId}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
-  public ResponseEntity<byte[]> downloadTripPdf(@PathVariable Long tripId) {
-    byte[] pdf = tripService.exportTripAsPdf(tripId);
+  public ResponseEntity<byte[]> downloadTripPdf(
+      @PathVariable Long tripId, Authentication authentication) {
+    byte[] pdf = tripService.exportTripAsPdf(tripId, currentUserId(authentication));
     return ResponseEntity.ok()
         .header(
             HttpHeaders.CONTENT_DISPOSITION,
@@ -92,8 +94,11 @@ public class TripController {
 
   @GetMapping("{tripId}")
   public ResponseEntity<TripResponce> getTripById(
-      @PathVariable Long tripId, @RequestParam(required = false) Long userId) {
-    TripResponce tripResponce = tripService.getTripById(tripId, userId);
+      @PathVariable Long tripId,
+      @RequestParam(required = false) Long userId,
+      Authentication authentication) {
+    TripResponce tripResponce =
+        tripService.getTripById(tripId, userId, currentUserId(authentication));
     return new ResponseEntity<>(tripResponce, HttpStatus.OK);
   }
 
@@ -126,8 +131,11 @@ public class TripController {
   public ResponseEntity<TripResponce> reorderDayActivities(
       @PathVariable Long tripId,
       @PathVariable Integer dayId,
-      @RequestBody List<Long> orderedActivityIds) {
-    TripResponce updated = tripService.reorderDayActivities(tripId, dayId, orderedActivityIds);
+      @RequestBody List<Long> orderedActivityIds,
+      Authentication authentication) {
+    TripResponce updated =
+        tripService.reorderDayActivities(
+            tripId, dayId, orderedActivityIds, currentUserId(authentication));
     return new ResponseEntity<>(updated, HttpStatus.OK);
   }
 
@@ -177,14 +185,30 @@ public class TripController {
     return new ResponseEntity<>(updated, HttpStatus.OK);
   }
 
-  @PostMapping("{tripId}/days/{dayId}/activities")
-  public ResponseEntity<TripResponce> addTripActivityWithMockPlace(
+  @PostMapping("{tripId}/days/{dayId}/activities/auto")
+  public ResponseEntity<TripResponce> addTripActivityAuto(
       @PathVariable Long tripId,
       @PathVariable Integer dayId,
       Authentication authentication) {
     TripResponce updated =
-        tripService.addTripActivityWithMockPlace(
-            tripId, dayId, currentUserId(authentication));
+        tripService.addTripActivityAuto(tripId, dayId, currentUserId(authentication));
+    return new ResponseEntity<>(updated, HttpStatus.CREATED);
+  }
+
+  @PostMapping("{tripId}/days/{dayId}/activities")
+  public ResponseEntity<TripResponce> addTripActivity(
+      @PathVariable Long tripId,
+      @PathVariable Integer dayId,
+      @RequestBody(required = false) AddTripActivityRequest request,
+      Authentication authentication) {
+    Long userId = currentUserId(authentication);
+    TripResponce updated;
+    if (request == null || request.getPlaceId() == null) {
+      // Compatibility fallback: clients can trigger "Suggest for me" without a body.
+      updated = tripService.addTripActivityAuto(tripId, dayId, userId);
+    } else {
+      updated = tripService.addTripActivity(tripId, dayId, request, userId);
+    }
     return new ResponseEntity<>(updated, HttpStatus.CREATED);
   }
 
