@@ -44,5 +44,12 @@ public class TriRequest {
 
   /** LOW (relaxed) / MEDIUM / HIGH — drives max stops per day and rest between activities. */
   private TripIntensity intensity;
+
+  /**
+   * Optional list of place ids the user explicitly wants in this trip (typically picked from
+   * their "interesting places" matches). These bypass category filtering and receive a large
+   * score boost during itinerary generation.
+   */
+  private List<Long> mustIncludePlaceIds;
 }
 

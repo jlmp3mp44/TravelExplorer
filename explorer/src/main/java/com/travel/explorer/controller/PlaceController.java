@@ -3,9 +3,11 @@ package com.travel.explorer.controller;
 
 import com.travel.explorer.config.AppConstants;
 import com.travel.explorer.entities.Place;
+import com.travel.explorer.payload.place.FreeTextPlaceSearchRequest;
 import com.travel.explorer.payload.place.PlaceListResponse;
 import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.service.PlaceService;
+import com.travel.explorer.service.PlaceSearchService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +30,15 @@ public class PlaceController {
 
   @Autowired
   PlaceService placeService;
+
+  @Autowired
+  PlaceSearchService placeSearchService;
+
+  @PostMapping("/search-text")
+  public ResponseEntity<List<PlaceResponse>> searchText(
+      @Valid @RequestBody FreeTextPlaceSearchRequest request) {
+    return ResponseEntity.ok(placeSearchService.searchByFreeText(request));
+  }
 
   @GetMapping()
   public ResponseEntity<PlaceListResponse> getAllPlaces(
