@@ -17,6 +17,12 @@ import org.springframework.stereotype.Service;
 public class PlaceRecommendationService {
 
   private static final double DIVERSITY_PENALTY = 0.3;
+  /**
+   * Score added to candidates the user marked as "must include" (their saved interesting places
+   * matched to the trip's geography). Far exceeds normalized content+SVD scores so they always
+   * land at the top of the ranking and survive diversity adjustment.
+   */
+  private static final double MUST_INCLUDE_BOOST = 1_000_000.0;
 
   private final ContentBasedScorer contentBasedScorer;
   private final CollaborativeFilteringClient collaborativeFilteringClient;
@@ -36,7 +42,7 @@ public class PlaceRecommendationService {
 
   public List<Place> rankPlaces(
       List<Place> places, List<String> selectedCategoryCodes, Long userId) {
-    return rankPlaces(places, selectedCategoryCodes, userId, null);
+    return rankPlaces(places, selectedCategoryCodes, userId, null, null);
   }
 
   /**
@@ -48,6 +54,19 @@ public class PlaceRecommendationService {
       List<String> selectedCategoryCodes,
       Long userId,
       Set<String> replacementCategoryFocus) {
+    return rankPlaces(places, selectedCategoryCodes, userId, replacementCategoryFocus, null);
+  }
+
+  /**
+   * @param mustIncludePlaceIds optional set of place ids that should receive a large additive
+   *     score boost so they rank at the top regardless of category match.
+   */
+  public List<Place> rankPlaces(
+      List<Place> places,
+      List<String> selectedCategoryCodes,
+      Long userId,
+      Set<String> replacementCategoryFocus,
+      Set<Long> mustIncludePlaceIds) {
     if (places == null || places.isEmpty()) {
       return List.of();
     }
@@ -104,6 +123,13 @@ public class PlaceRecommendationService {
       } else {
         // Cold-start or no ID: use content-based only
         finalScore = normalizedContent;
+      }
+
+      if (mustIncludePlaceIds != null
+          && !mustIncludePlaceIds.isEmpty()
+          && place.getId() != null
+          && mustIncludePlaceIds.contains(place.getId())) {
+        finalScore += MUST_INCLUDE_BOOST;
       }
 
       Set<String> placeCategories = extractCategoryCodes(place);

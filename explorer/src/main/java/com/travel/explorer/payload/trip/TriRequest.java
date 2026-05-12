@@ -44,5 +44,12 @@ public class TriRequest {
 
   /** LOW / MEDIUM / HIGH — stored only; not used for logic yet. */
   private TripIntensity intensity;
+
+  /**
+   * Optional list of place ids the user explicitly wants in this trip (typically picked from
+   * their "interesting places" matches). These bypass category filtering and receive a large
+   * score boost during itinerary generation.
+   */
+  private List<Long> mustIncludePlaceIds;
 }
 

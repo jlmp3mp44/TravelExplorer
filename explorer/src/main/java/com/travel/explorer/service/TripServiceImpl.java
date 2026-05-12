@@ -258,7 +258,7 @@ public class TripServiceImpl implements TripService {
     } else {
       geocodeAddress = buildGeocodeAddress(triRequest);
     }
-    fillItineraryFromNearbySearch(trip, geocodeAddress, ownerUserId);
+    fillItineraryFromNearbySearch(trip, geocodeAddress, ownerUserId, triRequest.getMustIncludePlaceIds());
 
     trip.setTitle(truncateTitle(generateTripTitle(trip, triRequest)));
 
@@ -337,7 +337,7 @@ public class TripServiceImpl implements TripService {
       String geocodeAddress = resolveGeocodeAddress(trip);
       trip.getDays().clear();
       fillItineraryFromNearbySearch(trip, geocodeAddress,
-          trip.getOwner() != null ? trip.getOwner().getUserId() : null);
+          trip.getOwner() != null ? trip.getOwner().getUserId() : null, null);
       boolean userSetTitle = request.getTitle() != null && !request.getTitle().isBlank();
       if (!userSetTitle) {
         trip.setTitle(truncateTitle(generateTripTitle(trip, null)));
@@ -650,6 +650,18 @@ public class TripServiceImpl implements TripService {
 
   private TripResponce toResponse(Trip trip) {
     TripResponce r = modelMapper.map(trip, TripResponce.class);
+    if (trip.getCities() != null && !trip.getCities().isEmpty()) {
+      List<Long> cityIds = new ArrayList<>();
+      LinkedHashSet<Long> countryIds = new LinkedHashSet<>();
+      for (City c : trip.getCities()) {
+        if (c.getId() != null) cityIds.add(c.getId());
+        if (c.getCountry() != null && c.getCountry().getId() != null) {
+          countryIds.add(c.getCountry().getId());
+        }
+      }
+      r.setCityIds(cityIds);
+      r.setCountryIds(new ArrayList<>(countryIds));
+    }
     if (trip.getOwner() != null) {
       User o = trip.getOwner();
       r.setOwnerId(o.getUserId());
@@ -736,7 +748,8 @@ public class TripServiceImpl implements TripService {
         "Trip has no cities; set cityIds on the trip or ensure itinerary places have addresses.");
   }
 
-  private void fillItineraryFromNearbySearch(Trip trip, String geocodeAddress, Long ownerUserId) {
+  private void fillItineraryFromNearbySearch(
+      Trip trip, String geocodeAddress, Long ownerUserId, List<Long> mustIncludePlaceIds) {
     LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
     double radius = 10000.0;
 
@@ -749,9 +762,34 @@ public class TripServiceImpl implements TripService {
     List<Place> candidates = placeCandidateAggregator.aggregateCandidates(
         center.latitude(), center.longitude(), radius, searchTypes);
 
-    // 2. Score with hybrid recommender (content + SVD)
+    // 1b. Inject user-requested must-include places (bypass category filter). They join the
+    // candidate pool unconditionally; rankPlaces will boost them so the scheduler keeps them.
+    Set<Long> boostedIds = new HashSet<>();
+    if (mustIncludePlaceIds != null && !mustIncludePlaceIds.isEmpty()) {
+      Set<Long> requested = new LinkedHashSet<>();
+      for (Long id : mustIncludePlaceIds) {
+        if (id != null) requested.add(id);
+      }
+      Set<Long> alreadyPresent = new HashSet<>();
+      for (Place p : candidates) {
+        if (p.getId() != null) alreadyPresent.add(p.getId());
+      }
+      List<Long> toLoad = new ArrayList<>();
+      for (Long id : requested) {
+        if (!alreadyPresent.contains(id)) toLoad.add(id);
+      }
+      if (!toLoad.isEmpty()) {
+        candidates = new ArrayList<>(candidates);
+        for (Place p : placeRepo.findAllById(toLoad)) {
+          candidates.add(p);
+        }
+      }
+      boostedIds.addAll(requested);
+    }
+
+    // 2. Score with hybrid recommender (content + SVD), boosting must-include ids
     List<Place> rankedPlaces = placeRecommendationService.rankPlaces(
-        candidates, searchTypes, ownerUserId);
+        candidates, searchTypes, ownerUserId, null, boostedIds.isEmpty() ? null : boostedIds);
 
     if (rankedPlaces.isEmpty()) {
       return;
