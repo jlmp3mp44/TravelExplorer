@@ -54,6 +54,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -114,6 +115,9 @@ public class TripServiceImpl implements TripService {
 
   @Autowired
   private BudgetService budgetService;
+
+  @Autowired
+  private PlacePhotoRefreshService placePhotoRefreshService;
 
   @Autowired
   private TripPdfExportService tripPdfExportService;
@@ -649,17 +653,6 @@ public class TripServiceImpl implements TripService {
   }
 
   private TripResponce toResponse(Trip trip) {
-    TripResponce r = modelMapper.map(trip, TripResponce.class);
-    if (trip.getOwner() != null) {
-      User o = trip.getOwner();
-      r.setOwnerId(o.getUserId());
-      r.setOwnerProfile(
-          new TripOwnerResponse(o.getUserId(), o.getUsername(), o.getEmail(), o.getPhoneNumber()));
-    } else {
-      r.setOwnerId(null);
-      r.setOwnerProfile(null);
-    }
-    // Compute estimated budget from all places in the trip
     List<Place> allPlaces = new ArrayList<>();
     if (trip.getDays() != null) {
       for (Day day : trip.getDays()) {
@@ -672,11 +665,39 @@ public class TripServiceImpl implements TripService {
         }
       }
     }
+    placePhotoRefreshService.refreshMissingPlacePhotos(allPlaces);
+
+    TripResponce r = modelMapper.map(trip, TripResponce.class);
+    if (trip.getOwner() != null) {
+      User o = trip.getOwner();
+      r.setOwnerId(o.getUserId());
+      r.setOwnerProfile(
+          new TripOwnerResponse(o.getUserId(), o.getUsername(), o.getEmail(), o.getPhoneNumber()));
+    } else {
+      r.setOwnerId(null);
+      r.setOwnerProfile(null);
+    }
     if (!allPlaces.isEmpty() && trip.getStartDate() != null && trip.getEndDate() != null) {
       int tripDays = (int) (trip.getEndDate().toEpochDay() - trip.getStartDate().toEpochDay()) + 1;
       r.setEstimatedBudget(budgetService.computeEstimatedBudget(allPlaces, tripDays));
     }
+    r.setCoverPhotoUrl(firstCoverPhotoUrl(r.getDays()));
     return r;
+  }
+
+  private static String firstCoverPhotoUrl(List<DayResponse> days) {
+    if (days == null || days.isEmpty()) {
+      return null;
+    }
+    return days.stream()
+        .sorted(Comparator.comparing(DayResponse::getDate, Comparator.nullsLast(Comparator.naturalOrder())))
+        .flatMap(d -> d.getActivities() == null ? Stream.empty() : d.getActivities().stream())
+        .flatMap(a -> a.getPlaces() == null ? Stream.empty() : a.getPlaces().stream())
+        .map(PlaceResponse::getPhotoUrl)
+        .filter(Objects::nonNull)
+        .filter(url -> !url.isBlank())
+        .findFirst()
+        .orElse(null);
   }
 
   private void assertTripAccess(Trip trip, Long currentUserId) {

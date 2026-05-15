@@ -93,7 +93,7 @@ public class Place {
       inverseJoinColumns = @JoinColumn(name = "related_place_id")
   )
   private List<Place> placesPeopleSearches;
-  @Column(name = "photoUrl")
+  @Column(name = "photoUrl", columnDefinition = "text")
   private String photoUrl;
   @ManyToMany(mappedBy = "places")
   private List<Activity> activities =  new ArrayList<>();

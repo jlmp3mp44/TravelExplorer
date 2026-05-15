@@ -1,6 +1,7 @@
 package com.travel.explorer.google;
 
 import com.travel.explorer.entities.Place;
+import com.travel.explorer.service.PlacePhotoRefreshService;
 import com.travel.explorer.google.request.Center;
 import com.travel.explorer.google.request.Circle;
 import com.travel.explorer.google.request.LocationBias;
@@ -55,6 +56,8 @@ public class GooglePlaceService {
   private final GooglePlaceClient client;
   private final GooglePlaceMapper mapper;
   private final PlaceRepo placeRepo;
+  private final PlacePhotoRefreshService placePhotoRefreshService;
+  private final GooglePlacePhotoMediaUrlBuilder photoMediaUrlBuilder;
   private final Executor categoryExecutor;
   private final int detailConcurrency;
 
@@ -62,11 +65,15 @@ public class GooglePlaceService {
       GooglePlaceClient client,
       GooglePlaceMapper mapper,
       PlaceRepo placeRepo,
+      PlacePhotoRefreshService placePhotoRefreshService,
+      GooglePlacePhotoMediaUrlBuilder photoMediaUrlBuilder,
       @Value("${google.search.detail-concurrency:5}") int detailConcurrency,
       @Value("${google.search.thread-pool-size:10}") int threadPoolSize) {
     this.client = client;
     this.mapper = mapper;
     this.placeRepo = placeRepo;
+    this.placePhotoRefreshService = placePhotoRefreshService;
+    this.photoMediaUrlBuilder = photoMediaUrlBuilder;
     this.detailConcurrency = detailConcurrency;
     this.categoryExecutor = Executors.newFixedThreadPool(threadPoolSize);
   }
@@ -121,7 +128,15 @@ public class GooglePlaceService {
       }
       Optional<Place> existing = placeRepo.findByGooglePlaceId(dto.getGooglePlaceId());
       if (existing.isPresent()) {
-        out.add(existing.get());
+        Place ep = existing.get();
+        if (ep.getPhotoUrl() == null || ep.getPhotoUrl().isBlank()) {
+          String url = photoMediaUrlBuilder.firstPhotoMediaUrl(dto);
+          if (url != null) {
+            ep.setPhotoUrl(url);
+            placeRepo.save(ep);
+          }
+        }
+        out.add(ep);
         continue;
       }
       try {
@@ -201,7 +216,9 @@ public class GooglePlaceService {
         result.putIfAbsent(p.getGooglePlaceId(), p);
       }
     }
-    return new ArrayList<>(result.values());
+    List<Place> out = new ArrayList<>(result.values());
+    placePhotoRefreshService.refreshMissingPlacePhotos(out);
+    return out;
   }
 
   /**

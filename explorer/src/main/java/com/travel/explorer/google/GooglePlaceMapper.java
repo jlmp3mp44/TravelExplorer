@@ -14,6 +14,7 @@ public class GooglePlaceMapper {
 
   private final ModelMapper modelMapper;
   private final CategoryResolutionService categoryResolutionService;
+  private final GooglePlacePhotoMediaUrlBuilder photoMediaUrlBuilder;
 
   private static final Map<String, Integer> PRICE_LEVEL_MAP = Map.of(
       "PRICE_LEVEL_FREE", 0,
@@ -23,9 +24,13 @@ public class GooglePlaceMapper {
       "PRICE_LEVEL_VERY_EXPENSIVE", 4
   );
 
-  public GooglePlaceMapper(ModelMapper modelMapper, CategoryResolutionService categoryResolutionService) {
+  public GooglePlaceMapper(
+      ModelMapper modelMapper,
+      CategoryResolutionService categoryResolutionService,
+      GooglePlacePhotoMediaUrlBuilder photoMediaUrlBuilder) {
     this.modelMapper = modelMapper;
     this.categoryResolutionService = categoryResolutionService;
+    this.photoMediaUrlBuilder = photoMediaUrlBuilder;
     modelMapper.addMappings(
         new PropertyMap<GooglePlaceDto, Place>() {
           @Override
@@ -42,6 +47,7 @@ public class GooglePlaceMapper {
             map().setRating(source.getRating());
             map().setUserRatingCount(source.getUserRatingCount());
             skip(destination.getPriceLevel());
+            skip(destination.getPhotoUrl());
           }
         });
   }
@@ -59,6 +65,10 @@ public class GooglePlaceMapper {
     place.setPriceLevel(parsePriceLevel(dto.getPriceLevel()));
     place.setPermanentlyClosed(isBusinessStatus(dto.getBusinessStatus(), "CLOSED_PERMANENTLY"));
     place.setTemporarilyClosed(isBusinessStatus(dto.getBusinessStatus(), "CLOSED_TEMPORARILY"));
+    String photoUrl = photoMediaUrlBuilder.firstPhotoMediaUrl(dto);
+    if (photoUrl != null) {
+      place.setPhotoUrl(photoUrl);
+    }
     return place;
   }
 

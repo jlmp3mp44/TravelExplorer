@@ -26,4 +26,14 @@ public class GooglePlaceDto {
   private String businessStatus;
   private String priceLevel;
 
+  /** Photo resource names for {@code /v1/{name}/media}; first entry is used as the primary image. */
+  private List<PhotoRef> photos;
+
+  @Data
+  @NoArgsConstructor
+  @AllArgsConstructor
+  public static class PhotoRef {
+    private String name;
+  }
+
 }

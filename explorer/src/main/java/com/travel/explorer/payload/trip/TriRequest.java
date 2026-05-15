@@ -42,7 +42,7 @@ public class TriRequest {
   /** Defaults to true when omitted. */
   private Boolean isPublic;
 
-  /** LOW / MEDIUM / HIGH — stored only; not used for logic yet. */
+  /** LOW (relaxed) / MEDIUM / HIGH — drives max stops per day and rest between activities. */
   private TripIntensity intensity;
 }
 
