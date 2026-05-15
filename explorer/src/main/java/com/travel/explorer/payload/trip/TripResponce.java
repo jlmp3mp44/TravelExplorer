@@ -43,5 +43,8 @@ public class TripResponce {
   private long ratingCount;
 
   private EstimatedBudget estimatedBudget;
+
+  /** Cover image: first place photo in itinerary order (by day date, activity order, place order). */
+  private String coverPhotoUrl;
 }
 

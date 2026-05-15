@@ -15,4 +15,7 @@ public class PlaceResponse {
 
   private String title;
   private Location location;
+
+  /** Google Place Photo media URL for this stop, when available. */
+  private String photoUrl;
 }

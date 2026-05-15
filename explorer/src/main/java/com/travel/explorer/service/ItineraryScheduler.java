@@ -4,6 +4,7 @@ import com.travel.explorer.entities.Activity;
 import com.travel.explorer.entities.Day;
 import com.travel.explorer.entities.Place;
 import com.travel.explorer.entities.Trip;
+import com.travel.explorer.entities.TripIntensity;
 import com.travel.explorer.entities.embeddable.OpenHours;
 import com.travel.explorer.service.scheduling.CategoryDuration;
 import com.travel.explorer.service.scheduling.DayTimeWindow;
@@ -31,6 +32,10 @@ public class ItineraryScheduler {
      */
     public ScheduleResult schedule(Trip trip, List<Place> rankedPlaces,
                                     BudgetService budgetService, int totalBudget) {
+        TripIntensity pace = trip.getIntensity() != null ? trip.getIntensity() : TripIntensity.MEDIUM;
+        int maxActivitiesThisDay = maxActivitiesPerDay(pace);
+        int restAfterActivityMin = restMinutesBetweenStops(pace);
+
         List<String> categories = trip.getCategories();
         int[] window = DayTimeWindow.windowMinutes(categories);
         int dayStartMin = window[0];
@@ -49,8 +54,13 @@ public class ItineraryScheduler {
             int currentTimeMin = dayStartMin;
             Place lastPlace = null;
             int sortOrder = 0;
+            int activitiesToday = 0;
 
-            for (int i = 0; i < rankedPlaces.size() && currentTimeMin < dayEndMin; i++) {
+            for (int i = 0;
+                 i < rankedPlaces.size()
+                     && currentTimeMin < dayEndMin
+                     && activitiesToday < maxActivitiesThisDay;
+                 i++) {
                 Place candidate = rankedPlaces.get(i);
 
                 // Skip if already used (by persisted ID or dedup key for transient places)
@@ -104,6 +114,7 @@ public class ItineraryScheduler {
                 activity.setEndTime(minutesToLocalDateTime(date, arrivalMin + durationMin));
 
                 day.getActivities().add(activity);
+                activitiesToday++;
 
                 if (candidate.getId() != null) {
                     usedPlaceIds.add(candidate.getId());
@@ -112,7 +123,7 @@ public class ItineraryScheduler {
                     usedPlaceKeys.add(dedupKey);
                 }
                 runningCost += placeCost;
-                currentTimeMin = arrivalMin + durationMin;
+                currentTimeMin = arrivalMin + durationMin + restAfterActivityMin;
                 lastPlace = candidate;
             }
 
@@ -120,6 +131,24 @@ public class ItineraryScheduler {
         }
 
         return new ScheduleResult(days, runningCost, usedPlaceIds, usedPlaceKeys);
+    }
+
+    /** Hard cap so LOW (“relaxed”) cannot pack a full window with many short stops. */
+    private static int maxActivitiesPerDay(TripIntensity pace) {
+        return switch (pace) {
+            case LOW -> 4;
+            case MEDIUM -> 8;
+            case HIGH -> Integer.MAX_VALUE;
+        };
+    }
+
+    /** Extra idle time after each stop before the next slot (coffee, transit slack). */
+    private static int restMinutesBetweenStops(TripIntensity pace) {
+        return switch (pace) {
+            case LOW -> 45;
+            case MEDIUM -> 18;
+            case HIGH -> 0;
+        };
     }
 
     /** Check if a place is likely open during [startMin, endMin) on the given date. */

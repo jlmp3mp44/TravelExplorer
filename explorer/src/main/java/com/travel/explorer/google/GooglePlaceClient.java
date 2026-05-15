@@ -29,12 +29,12 @@ public class GooglePlaceClient {
   private static final String FULL_FIELD_MASK =
       "places.id,places.displayName,places.formattedAddress,places.types,places.location,"
           + "places.primaryType,places.rating,places.userRatingCount,places.businessStatus,"
-          + "places.priceLevel,nextPageToken";
+          + "places.priceLevel,places.photos,nextPageToken";
 
   /** Field mask for single Place Details (GET) — no "places." prefix. */
   private static final String DETAIL_FIELD_MASK =
       "id,displayName,formattedAddress,types,location,"
-          + "primaryType,rating,userRatingCount,businessStatus,priceLevel";
+          + "primaryType,rating,userRatingCount,businessStatus,priceLevel,photos";
 
   public GooglePlaceClient(@Value("${google.api.key}") String apiKey, RestTemplateBuilder builder) {
     this.apiKey = apiKey;
@@ -86,7 +86,7 @@ public class GooglePlaceClient {
         "X-Goog-FieldMask",
         "places.id,places.displayName,places.formattedAddress,places.types,places.location,"
             + "places.primaryType,places.rating,places.userRatingCount,places.businessStatus,"
-            + "places.priceLevel");
+            + "places.priceLevel,places.photos");
 
     HttpEntity<SearchNearbyRequest> entity = new HttpEntity<>(requestBody, headers);
 
