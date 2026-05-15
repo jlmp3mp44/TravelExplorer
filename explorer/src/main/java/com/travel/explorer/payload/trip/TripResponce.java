@@ -25,6 +25,12 @@ public class TripResponce {
 
   private List<DayResponse> days;
 
+  /** City ids the trip targets (used by clients to derive geographic context). */
+  private List<Long> cityIds;
+
+  /** Country ids the trip targets (derived from cities). */
+  private List<Long> countryIds;
+
   private Boolean isPublic;
 
   /** Present when the trip was created by a logged-in user; use to detect ownership on the client. */
