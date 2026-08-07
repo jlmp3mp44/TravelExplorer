@@ -30,8 +30,14 @@ public class ItineraryScheduler {
      * @param totalBudget the user's budget
      * @return list of Days with Activities populated, and total estimated cost
      */
-    public ScheduleResult schedule(Trip trip, List<Place> rankedPlaces,
-                                    BudgetService budgetService, int totalBudget) {
+    public ScheduleResult schedule(
+            Trip trip,
+            List<Place> rankedPlaces,
+            BudgetService budgetService,
+            int totalBudget,
+            double centerLat,
+            double centerLng,
+            double maxRadiusMeters) {
         TripIntensity pace = trip.getIntensity() != null ? trip.getIntensity() : TripIntensity.MEDIUM;
         int maxActivitiesThisDay = maxActivitiesPerDay(pace);
         int restAfterActivityMin = restMinutesBetweenStops(pace);
@@ -65,6 +71,9 @@ public class ItineraryScheduler {
 
                 // Skip if already used (by persisted ID or dedup key for transient places)
                 if (candidate.getId() != null && usedPlaceIds.contains(candidate.getId())) {
+                    continue;
+                }
+                if (!isWithinTripRadius(candidate, centerLat, centerLng, maxRadiusMeters)) {
                     continue;
                 }
                 String dedupKey = buildDedupKey(candidate);
@@ -131,6 +140,20 @@ public class ItineraryScheduler {
         }
 
         return new ScheduleResult(days, runningCost, usedPlaceIds, usedPlaceKeys);
+    }
+
+    private static boolean isWithinTripRadius(
+            Place place, double centerLat, double centerLng, double maxRadiusMeters) {
+        if (place == null || place.getLocation() == null) {
+            return false;
+        }
+        double km =
+                HaversineUtil.distanceKm(
+                        centerLat,
+                        centerLng,
+                        place.getLocation().getLat(),
+                        place.getLocation().getLng());
+        return km * 1000 <= maxRadiusMeters;
     }
 
     /** Hard cap so LOW (“relaxed”) cannot pack a full window with many short stops. */

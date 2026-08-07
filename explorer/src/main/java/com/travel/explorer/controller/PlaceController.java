@@ -7,11 +7,11 @@ import com.travel.explorer.payload.place.FreeTextPlaceSearchRequest;
 import com.travel.explorer.payload.place.PlaceListResponse;
 import com.travel.explorer.payload.place.PlaceResponse;
 import com.travel.explorer.service.PlaceService;
+import com.travel.explorer.service.PlacePhotoService;
 import com.travel.explorer.service.PlaceSearchService;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -33,6 +33,21 @@ public class PlaceController {
 
   @Autowired
   PlaceSearchService placeSearchService;
+
+  @Autowired
+  PlacePhotoService placePhotoService;
+
+  @GetMapping("{placeId}/photo")
+  public ResponseEntity<byte[]> getPlacePhoto(@PathVariable Long placeId) {
+    return placePhotoService
+        .loadPhoto(placeId)
+        .map(
+            payload ->
+                ResponseEntity.ok()
+                    .headers(payload.cacheHeaders())
+                    .body(payload.body()))
+        .orElseGet(() -> ResponseEntity.notFound().build());
+  }
 
   @PostMapping("/search-text")
   public ResponseEntity<List<PlaceResponse>> searchText(

@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: explorer
+    networks:
+      - explorer-net
+  backend:
+    image: explorerapi
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - explorer-net
+  recommendation-service:
+    image: recommendation-service
+    ports:
+      - "8001:8001"
+    environment:
+      RECOMMENDER_DB_HOST: db
+      RECOMMENDER_DB_PASSWORD: admin
+    depends_on:
+      - db
+    networks:
+      - explorer-net
+networks:
+  explorer-net:
+    driver: bridge

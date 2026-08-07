@@ -10,8 +10,10 @@ import com.travel.explorer.security.request.LoginRequest;
 import com.travel.explorer.security.request.SignUpRequest;
 import com.travel.explorer.security.responce.MessageResponce;
 import com.travel.explorer.security.responce.UserInfoResponse;
+import com.travel.explorer.security.responce.ValidationErrorsResponse;
 import com.travel.explorer.security.service.UserDetailsImpl;
 import jakarta.validation.Valid;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -29,6 +31,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -90,14 +94,11 @@ public class AuthController {
   }
 
   @PostMapping("/signup")
-  public ResponseEntity<?> sighUpUser(@Valid  @RequestBody SignUpRequest signUpRequest) {
-
-    if(userRepository.existsByUsername(signUpRequest.getUsername())){
-      return ResponseEntity.badRequest().body(new MessageResponce("Username already taken!"));
-    }
-
-    if(userRepository.existsByEmail(signUpRequest.getEmail())){
-      return ResponseEntity.badRequest().body(new MessageResponce("Email already taken!"));
+  public ResponseEntity<?> sighUpUser(
+      @Valid @RequestBody SignUpRequest signUpRequest, BindingResult bindingResult) {
+    List<String> errors = collectSignUpErrors(signUpRequest, bindingResult);
+    if (!errors.isEmpty()) {
+      return ResponseEntity.badRequest().body(new ValidationErrorsResponse(errors));
     }
 
     Set<String> strRoles = signUpRequest.getRoles();
@@ -138,6 +139,31 @@ public class AuthController {
 
     userRepository.save(user);
     return ResponseEntity.ok(new MessageResponce("User registered successfully"));
+  }
+
+  private List<String> collectSignUpErrors(
+      SignUpRequest signUpRequest, BindingResult bindingResult) {
+    List<String> errors = new ArrayList<>();
+    if (bindingResult != null && bindingResult.hasErrors()) {
+      for (var err : bindingResult.getAllErrors()) {
+        if (err instanceof FieldError fieldError) {
+          errors.add(fieldError.getDefaultMessage());
+        } else if (err.getDefaultMessage() != null) {
+          errors.add(err.getDefaultMessage());
+        }
+      }
+    }
+    String username = signUpRequest.getUsername();
+    if (username != null
+        && !username.isBlank()
+        && userRepository.existsByUsername(username)) {
+      errors.add("Username already taken!");
+    }
+    String email = signUpRequest.getEmail();
+    if (email != null && !email.isBlank() && userRepository.existsByEmail(email)) {
+      errors.add("Email already taken!");
+    }
+    return errors;
   }
 
   @PostMapping("/signout")

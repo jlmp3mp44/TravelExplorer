@@ -22,12 +22,21 @@ public class GoogleGeocodingClient {
   }
 
   public GeocodeResponse geocode(String address) {
-    var uri = UriComponentsBuilder.fromUriString(BASE_URL)
-        .queryParam("address", address)
-        .queryParam("key", apiKey)
-        .build()
-        .encode()
-        .toUri();
+    return geocode(address, null);
+  }
+
+  /**
+   * @param countryIso optional ISO 3166-1 alpha-2 (e.g. {@code IT}) to disambiguate city names
+   */
+  public GeocodeResponse geocode(String address, String countryIso) {
+    var builder =
+        UriComponentsBuilder.fromUriString(BASE_URL)
+            .queryParam("address", address)
+            .queryParam("key", apiKey);
+    if (countryIso != null && !countryIso.isBlank()) {
+      builder.queryParam("components", "country:" + countryIso.trim().toUpperCase());
+    }
+    var uri = builder.build().encode().toUri();
     return restTemplate.getForObject(uri, GeocodeResponse.class);
   }
 }

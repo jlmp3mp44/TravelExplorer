@@ -9,6 +9,7 @@ import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Component
 public class GooglePlaceClient {
@@ -61,18 +62,25 @@ public class GooglePlaceClient {
    * Uses GET {@code /v1/places/{placeId}} endpoint.
    */
   public GooglePlaceDto getPlaceDetails(String placeId) {
+    return getPlaceDetails(placeId, GooglePlacesApi.LANGUAGE_CODE);
+  }
+
+  public GooglePlaceDto getPlaceDetails(String placeId, String languageCode) {
     HttpHeaders headers = new HttpHeaders();
     headers.set("X-Goog-Api-Key", apiKey);
     headers.set("X-Goog-FieldMask", DETAIL_FIELD_MASK);
 
     HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-    ResponseEntity<GooglePlaceDto> response = restTemplate.exchange(
-        PLACE_DETAILS_URL + placeId,
-        HttpMethod.GET,
-        entity,
-        GooglePlaceDto.class
-    );
+    var uri =
+        UriComponentsBuilder.fromUriString(PLACE_DETAILS_URL + placeId)
+            .queryParam("languageCode", languageCode)
+            .build()
+            .encode()
+            .toUri();
+
+    ResponseEntity<GooglePlaceDto> response =
+        restTemplate.exchange(uri, HttpMethod.GET, entity, GooglePlaceDto.class);
     return response.getBody();
   }
 

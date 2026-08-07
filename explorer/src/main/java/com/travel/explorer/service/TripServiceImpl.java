@@ -34,16 +34,22 @@ import com.travel.explorer.repo.CityRepository;
 import com.travel.explorer.repo.DayRepository;
 import com.travel.explorer.repo.PlaceRepo;
 import com.travel.explorer.repo.TripItineraryPlaceAdjustmentRepository;
+import com.travel.explorer.repo.TripRatingRepository;
 import com.travel.explorer.repo.TripRepo;
 import com.travel.explorer.repo.TripSpecifications;
 import com.travel.explorer.repo.UserActivityPreferenceRepository;
 import com.travel.explorer.repo.UserRepository;
 import com.travel.explorer.service.scheduling.HaversineUtil;
+import com.travel.explorer.service.scheduling.PlaceGeoFilter;
+import com.travel.explorer.service.scheduling.PlaceGeoFilter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import jakarta.transaction.Transactional;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.HashSet;
@@ -58,6 +64,7 @@ import java.util.stream.Stream;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -68,8 +75,23 @@ import org.hibernate.Hibernate;
 @Service
 public class TripServiceImpl implements TripService {
 
+  private static final Logger log = LoggerFactory.getLogger(TripServiceImpl.class);
+
+  private static final double TRIP_ITINERARY_SEARCH_RADIUS_METERS = 10_000;
+
+  /** Max distance from trip center for any scheduled place (including saved must-include). */
+  private static final double TRIP_MAX_PLACE_DISTANCE_METERS = TRIP_ITINERARY_SEARCH_RADIUS_METERS;
+
+  private static final String SORT_AVERAGE_RATING = "averageRating";
+  private static final String SORT_RATING_COUNT = "ratingCount";
+
+  private static final RatingStats NO_RATINGS = new RatingStats(0.0, 0L);
+
   @Autowired
   private TripRepo tripRepo;
+
+  @Autowired
+  private TripRatingRepository tripRatingRepository;
 
   @Autowired
   private CityRepository cityRepository;
@@ -171,13 +193,41 @@ public class TripServiceImpl implements TripService {
     return toTripListResponse(tripPage);
   }
 
+  private static boolean isComputedTripSort(String sortBy) {
+    if (sortBy == null || sortBy.isBlank()) {
+      return false;
+    }
+    return SORT_AVERAGE_RATING.equalsIgnoreCase(sortBy)
+        || SORT_RATING_COUNT.equalsIgnoreCase(sortBy);
+  }
+
   private Pageable buildTripPageable(
       String sortBy, String sortOrder, Integer pageNumber, Integer pageSize) {
+    if (isComputedTripSort(sortBy)) {
+      return PageRequest.of(pageNumber, pageSize);
+    }
+    String entitySortField = mapTripSortField(sortBy);
     Sort sortByAndOrder =
         sortOrder.equalsIgnoreCase("asc")
-            ? Sort.by(sortBy).ascending()
-            : Sort.by(sortBy).descending();
+            ? Sort.by(entitySortField).ascending()
+            : Sort.by(entitySortField).descending();
     return PageRequest.of(pageNumber, pageSize, sortByAndOrder);
+  }
+
+  /** Maps API sort keys to {@link Trip} property names. */
+  private static String mapTripSortField(String sortBy) {
+    if (sortBy == null || sortBy.isBlank()) {
+      return "id";
+    }
+    return switch (sortBy) {
+      case "startDate" -> "startDate";
+      case "endDate" -> "endDate";
+      case "title" -> "title";
+      case "budget" -> "budget";
+      case "isPublic" -> "isPublic";
+      case "intensity", "tripIntensity" -> "intensity";
+      default -> sortBy;
+    };
   }
 
   private Page<Trip> pageGlobalTrips(
@@ -188,9 +238,15 @@ public class TripServiceImpl implements TripService {
       List<String> categoryCodes,
       Long countryId,
       String countryName) {
-    Pageable pageable = buildTripPageable(sortBy, sortOrder, pageNumber, pageSize);
     Specification<Trip> filter =
         TripSpecifications.fromFilters(categoryCodes, countryId, countryName);
+    if (isComputedTripSort(sortBy)) {
+      if (filter == null) {
+        return pageGlobalTripsByRatingSort(sortBy, sortOrder, pageNumber, pageSize);
+      }
+      return pageTripsSortedByRating(filter, sortBy, sortOrder, pageNumber, pageSize);
+    }
+    Pageable pageable = buildTripPageable(sortBy, sortOrder, pageNumber, pageSize);
     if (filter == null) {
       return tripRepo.findAll(pageable);
     }
@@ -207,7 +263,6 @@ public class TripServiceImpl implements TripService {
       List<String> categoryCodes,
       Long countryId,
       String countryName) {
-    Pageable pageable = buildTripPageable(sortBy, sortOrder, pageNumber, pageSize);
     Specification<Trip> base = TripSpecifications.ownedByUser(ownerUserId);
     if (!includePrivate) {
       base = base.and(TripSpecifications.isPublicTrip());
@@ -215,11 +270,115 @@ public class TripServiceImpl implements TripService {
     Specification<Trip> filter =
         TripSpecifications.fromFilters(categoryCodes, countryId, countryName);
     Specification<Trip> combined = filter != null ? base.and(filter) : base;
+    if (isComputedTripSort(sortBy)) {
+      return pageTripsSortedByRating(combined, sortBy, sortOrder, pageNumber, pageSize);
+    }
+    Pageable pageable = buildTripPageable(sortBy, sortOrder, pageNumber, pageSize);
     return tripRepo.findAll(combined, pageable);
   }
 
+  private Page<Trip> pageGlobalTripsByRatingSort(
+      String sortBy, String sortOrder, Integer pageNumber, Integer pageSize) {
+    Pageable pageable = PageRequest.of(pageNumber, pageSize);
+    boolean asc = sortOrder != null && sortOrder.equalsIgnoreCase("asc");
+    Page<Long> idPage;
+    if (SORT_RATING_COUNT.equalsIgnoreCase(sortBy)) {
+      idPage =
+          asc
+              ? tripRepo.findAllTripIdsOrderByRatingCountAsc(pageable)
+              : tripRepo.findAllTripIdsOrderByRatingCountDesc(pageable);
+    } else {
+      idPage =
+          asc
+              ? tripRepo.findAllTripIdsOrderByAverageRatingAsc(pageable)
+              : tripRepo.findAllTripIdsOrderByAverageRatingDesc(pageable);
+    }
+    return tripsPageFromOrderedIds(idPage);
+  }
+
+  private Page<Trip> pageTripsSortedByRating(
+      Specification<Trip> spec,
+      String sortBy,
+      String sortOrder,
+      Integer pageNumber,
+      Integer pageSize) {
+    List<Trip> trips = tripRepo.findAll(spec);
+    Map<Long, RatingStats> statsByTripId = loadRatingStatsByTripId();
+    boolean asc = sortOrder != null && sortOrder.equalsIgnoreCase("asc");
+    Comparator<Trip> comparator =
+        SORT_RATING_COUNT.equalsIgnoreCase(sortBy)
+            ? Comparator.comparingLong(
+                t -> statsByTripId.getOrDefault(t.getId(), NO_RATINGS).count())
+            : Comparator.comparingDouble(
+                t -> statsByTripId.getOrDefault(t.getId(), NO_RATINGS).average());
+    if (!asc) {
+      comparator = comparator.reversed();
+    }
+    comparator = comparator.thenComparing(Trip::getId, Comparator.nullsLast(Long::compareTo));
+    List<Trip> sorted = trips.stream().sorted(comparator).toList();
+    Pageable pageable = PageRequest.of(pageNumber, pageSize);
+    int start = (int) pageable.getOffset();
+    int end = Math.min(start + pageable.getPageSize(), sorted.size());
+    List<Trip> pageContent = start >= sorted.size() ? List.of() : sorted.subList(start, end);
+    return new PageImpl<>(pageContent, pageable, sorted.size());
+  }
+
+  private Map<Long, RatingStats> loadRatingStatsByTripId() {
+    Map<Long, RatingStats> stats = new LinkedHashMap<>();
+    for (Object[] row : tripRatingRepository.aggregateRatingStatsByTripId()) {
+      Long tripId = (Long) row[0];
+      Double avg = row[1] != null ? ((Number) row[1]).doubleValue() : 0.0;
+      long count = row[2] != null ? ((Number) row[2]).longValue() : 0L;
+      stats.put(tripId, new RatingStats(avg, count));
+    }
+    return stats;
+  }
+
+  private Page<Trip> tripsPageFromOrderedIds(Page<Long> idPage) {
+    List<Long> ids = idPage.getContent();
+    if (ids.isEmpty()) {
+      return Page.empty(idPage.getPageable());
+    }
+    Map<Long, Trip> tripsById =
+        tripRepo.findAllWithOwnerByIdIn(ids).stream()
+            .collect(Collectors.toMap(Trip::getId, t -> t, (a, b) -> a, LinkedHashMap::new));
+    List<Trip> ordered = ids.stream().map(tripsById::get).filter(Objects::nonNull).toList();
+    return new PageImpl<>(ordered, idPage.getPageable(), idPage.getTotalElements());
+  }
+
+  private record RatingStats(double average, long count) {}
+
   private TripListResponce toTripListResponse(Page<Trip> tripPage) {
-    List<TripResponce> tripResponses = tripPage.getContent().stream().map(this::toResponse).toList();
+    List<Trip> trips = tripPage.getContent();
+    if (trips.isEmpty()) {
+      TripListResponce empty = new TripListResponce();
+      empty.setContent(List.of());
+      empty.setPageNumber(tripPage.getNumber());
+      empty.setPageSize(tripPage.getSize());
+      empty.setLastPage(tripPage.isLast());
+      empty.setTotalPages(tripPage.getTotalPages());
+      empty.setTotalElements(tripPage.getTotalElements());
+      return empty;
+    }
+
+    List<Long> tripIds = trips.stream().map(Trip::getId).filter(Objects::nonNull).toList();
+    Map<Long, Trip> tripsById =
+        tripRepo.findAllWithOwnerByIdIn(tripIds).stream()
+            .collect(Collectors.toMap(Trip::getId, t -> t, (a, b) -> a, LinkedHashMap::new));
+    List<Trip> orderedTrips =
+        tripIds.stream().map(tripsById::get).filter(Objects::nonNull).toList();
+
+    Map<Long, Long> coverPlaceIdByTripId = loadCoverPlaceIdByTripId(tripIds);
+
+    List<TripResponce> tripResponses =
+        orderedTrips.stream()
+            .map(t -> toListSummaryResponse(t, coverPlaceIdByTripId.get(t.getId())))
+            .filter(
+                t ->
+                    t.getCoverPhotoUrl() != null && !t.getCoverPhotoUrl().isBlank())
+            .toList();
+    ratingService.attachTripListRatingSummaries(tripResponses);
+
     TripListResponce tripListResponce = new TripListResponce();
     tripListResponce.setContent(tripResponses);
     tripListResponce.setPageNumber(tripPage.getNumber());
@@ -228,6 +387,70 @@ public class TripServiceImpl implements TripService {
     tripListResponce.setTotalPages(tripPage.getTotalPages());
     tripListResponce.setTotalElements(tripPage.getTotalElements());
     return tripListResponce;
+  }
+
+  private Map<Long, Long> loadCoverPlaceIdByTripId(List<Long> tripIds) {
+    if (tripIds.isEmpty()) {
+      return Map.of();
+    }
+    Map<Long, Long> coverPlaces = new HashMap<>();
+    for (Object[] row : tripRepo.findCoverPhotosByTripIds(tripIds)) {
+      if (row[0] == null || row[2] == null) {
+        continue;
+      }
+      Long tripId = ((Number) row[0]).longValue();
+      Long placeId = ((Number) row[2]).longValue();
+      coverPlaces.put(tripId, placeId);
+    }
+    return coverPlaces;
+  }
+
+  /** Lightweight card payload for paginated lists (no itinerary, no Google refresh). */
+  private TripResponce toListSummaryResponse(Trip trip, Long coverPlaceId) {
+    TripResponce r = new TripResponce();
+    if (trip.getId() != null) {
+      r.setId(trip.getId().intValue());
+    }
+    r.setTitle(trip.getTitle());
+    r.setDesc(trip.getDesc());
+    if (trip.getStartDate() != null) {
+      r.setStartDate(trip.getStartDate().toString());
+    }
+    if (trip.getEndDate() != null) {
+      r.setEndDate(trip.getEndDate().toString());
+    }
+    r.setCategories(trip.getCategories());
+    r.setIntensity(trip.getIntensity());
+    r.setIsPublic(trip.getIsPublic());
+    applyListCoverPhoto(r, coverPlaceId);
+    if (trip.getOwner() != null) {
+      User o = trip.getOwner();
+      r.setOwnerId(o.getUserId());
+      r.setOwnerProfile(
+          new TripOwnerResponse(o.getUserId(), o.getUsername(), o.getEmail(), o.getPhoneNumber()));
+    }
+    return r;
+  }
+
+  /**
+   * List cards read cover image from {@code days[].activities[].places[].photoUrl} on the client;
+   * include a minimal stub plus {@link TripResponce#setCoverPhotoUrl}.
+   */
+  private static void applyListCoverPhoto(TripResponce response, Long coverPlaceId) {
+    String photoUrl = PlacePhotoService.publicPhotoUrl(coverPlaceId);
+    response.setCoverPhotoUrl(photoUrl);
+    if (coverPlaceId == null || photoUrl == null) {
+      response.setDays(List.of());
+      return;
+    }
+    PlaceResponse place = new PlaceResponse();
+    place.setId(coverPlaceId);
+    place.setPhotoUrl(photoUrl);
+    ActivityResponse activity = new ActivityResponse();
+    activity.setPlaces(List.of(place));
+    DayResponse day = new DayResponse();
+    day.setActivities(List.of(activity));
+    response.setDays(List.of(day));
   }
 
   @Override
@@ -249,7 +472,7 @@ public class TripServiceImpl implements TripService {
       throw new APIException("endDate must be on or after startDate");
     }
 
-    String geocodeAddress;
+    GeocodeTarget geocodeTarget;
     if (triRequest.getCityIds() != null
         && triRequest.getCityIds().stream().anyMatch(Objects::nonNull)) {
       applyCityIds(trip, triRequest.getCityIds());
@@ -258,11 +481,12 @@ public class TripServiceImpl implements TripService {
       Map<Long, City> byId =
           trip.getCities().stream().collect(Collectors.toMap(City::getId, c -> c));
       City primary = byId.get(nonNullIds.get(0));
-      geocodeAddress = buildGeocodeAddressFromCity(primary);
+      geocodeTarget = geocodeTargetFromCity(primary);
     } else {
-      geocodeAddress = buildGeocodeAddress(triRequest);
+      geocodeTarget = new GeocodeTarget(buildGeocodeAddress(triRequest), null);
     }
-    fillItineraryFromNearbySearch(trip, geocodeAddress, ownerUserId, triRequest.getMustIncludePlaceIds());
+    fillItineraryFromNearbySearch(
+        trip, geocodeTarget, ownerUserId, triRequest.getMustIncludePlaceIds());
 
     trip.setTitle(truncateTitle(generateTripTitle(trip, triRequest)));
 
@@ -338,10 +562,13 @@ public class TripServiceImpl implements TripService {
       if (trip.getCategories() == null || trip.getCategories().isEmpty()) {
         throw new APIException("categories are required to regenerate the itinerary");
       }
-      String geocodeAddress = resolveGeocodeAddress(trip);
+      GeocodeTarget geocodeTarget = resolveGeocodeTarget(trip);
       trip.getDays().clear();
-      fillItineraryFromNearbySearch(trip, geocodeAddress,
-          trip.getOwner() != null ? trip.getOwner().getUserId() : null, null);
+      fillItineraryFromNearbySearch(
+          trip,
+          geocodeTarget,
+          trip.getOwner() != null ? trip.getOwner().getUserId() : null,
+          null);
       boolean userSetTitle = request.getTitle() != null && !request.getTitle().isBlank();
       if (!userSetTitle) {
         trip.setTitle(truncateTitle(generateTripTitle(trip, null)));
@@ -695,8 +922,30 @@ public class TripServiceImpl implements TripService {
       int tripDays = (int) (trip.getEndDate().toEpochDay() - trip.getStartDate().toEpochDay()) + 1;
       r.setEstimatedBudget(budgetService.computeEstimatedBudget(allPlaces, tripDays));
     }
+    rewritePlacePhotoUrlsToProxy(r.getDays());
     r.setCoverPhotoUrl(firstCoverPhotoUrl(r.getDays()));
     return r;
+  }
+
+  private static void rewritePlacePhotoUrlsToProxy(List<DayResponse> days) {
+    if (days == null) {
+      return;
+    }
+    for (DayResponse day : days) {
+      if (day.getActivities() == null) {
+        continue;
+      }
+      for (ActivityResponse activity : day.getActivities()) {
+        if (activity.getPlaces() == null) {
+          continue;
+        }
+        for (PlaceResponse place : activity.getPlaces()) {
+          if (place != null && place.getId() != null) {
+            place.setPhotoUrl(PlacePhotoService.publicPhotoUrl(place.getId()));
+          }
+        }
+      }
+    }
   }
 
   private static String firstCoverPhotoUrl(List<DayResponse> days) {
@@ -752,96 +1001,221 @@ public class TripServiceImpl implements TripService {
     trip.setCities(new HashSet<>(loaded));
   }
 
-  private String resolveGeocodeAddress(Trip trip) {
+  private record GeocodeTarget(String address, String countryIso) {}
+
+  private record TripPlaceSearchContext(GeocodeTarget geocode, LatLng center, double radiusMeters) {}
+
+  private TripPlaceSearchContext tripPlaceSearchContext(Trip trip) {
+    GeocodeTarget target = resolveGeocodeTarget(trip);
+    LatLng center =
+        googleGeocodingService.geocodeToLatLng(target.address(), target.countryIso());
+    return new TripPlaceSearchContext(target, center, TRIP_ITINERARY_SEARCH_RADIUS_METERS);
+  }
+
+  private boolean isWithinTripSearchRadius(Place place, TripPlaceSearchContext ctx) {
+    if (place == null || place.getLocation() == null) {
+      return false;
+    }
+    return !PlaceGeoFilter.withinRadius(
+            List.of(place),
+            ctx.center().latitude(),
+            ctx.center().longitude(),
+            ctx.radiusMeters())
+        .isEmpty();
+  }
+
+  private GeocodeTarget resolveGeocodeTarget(Trip trip) {
     if (trip.getCities() != null && !trip.getCities().isEmpty()) {
       City primary =
           trip.getCities().stream()
               .min(Comparator.comparing(City::getId))
               .orElseThrow();
-      return buildGeocodeAddressFromCity(primary);
+      return geocodeTargetFromCity(primary);
     }
     String fromPlaces = firstPlaceAddressOnTrip(trip);
     if (fromPlaces != null && !fromPlaces.isBlank()) {
-      return fromPlaces.trim();
+      return new GeocodeTarget(fromPlaces.trim(), null);
     }
     if (trip.getTitle() != null && !trip.getTitle().isBlank()) {
-      return trip.getTitle().trim();
+      return new GeocodeTarget(trip.getTitle().trim(), null);
     }
     throw new APIException(
         "Trip has no cities; set cityIds on the trip or ensure itinerary places have addresses.");
   }
 
+  private static GeocodeTarget geocodeTargetFromCity(City city) {
+    return new GeocodeTarget(
+        buildGeocodeAddressFromCity(city),
+        city.getCountry() != null ? city.getCountry().getIso() : null);
+  }
+
+  /**
+   * Reuses an existing row by {@code googlePlaceId} when present, but copies coordinates from the
+   * freshly geocoded candidate so stale worldwide coordinates are not attached to the trip.
+   */
+  private Place resolvePersistedPlaceForItinerary(Place candidate) {
+    if (candidate.getGooglePlaceId() != null && !candidate.getGooglePlaceId().isBlank()) {
+      Place existing =
+          placeRepo.findByGooglePlaceId(candidate.getGooglePlaceId()).orElse(null);
+      if (existing != null) {
+        PlaceCoordinateSync.applyFreshLocation(existing, candidate);
+        return placeRepo.save(existing);
+      }
+    }
+    if (candidate.getId() != null) {
+      return candidate;
+    }
+    return placeRepo.save(candidate);
+  }
+
+  private void pruneActivitiesOutsideTripRadius(
+      List<Day> days, double centerLat, double centerLng, double radiusMeters) {
+    if (days == null) {
+      return;
+    }
+    for (Day day : days) {
+      if (day.getActivities() == null) {
+        continue;
+      }
+      day.getActivities()
+          .removeIf(
+              activity -> {
+                if (activity.getPlaces() == null || activity.getPlaces().isEmpty()) {
+                  return true;
+                }
+                Place place = activity.getPlaces().get(0);
+                return place.getLocation() == null
+                    || PlaceGeoFilter.withinRadius(
+                            List.of(place), centerLat, centerLng, radiusMeters)
+                        .isEmpty();
+              });
+      int order = 0;
+      for (Activity activity : day.getActivities()) {
+        activity.setSortOrder(order++);
+      }
+    }
+  }
+
   private void fillItineraryFromNearbySearch(
-      Trip trip, String geocodeAddress, Long ownerUserId, List<Long> mustIncludePlaceIds) {
-    LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
-    double radius = 10000.0;
+      Trip trip, GeocodeTarget geocodeTarget, Long ownerUserId, List<Long> mustIncludePlaceIds) {
+    LatLng center =
+        googleGeocodingService.geocodeToLatLng(
+            geocodeTarget.address(), geocodeTarget.countryIso());
+    double searchRadius = TRIP_ITINERARY_SEARCH_RADIUS_METERS;
+    double centerLat = center.latitude();
+    double centerLng = center.longitude();
+    log.info(
+        "Trip itinerary search center: {} ({}), radius {}m",
+        geocodeTarget.address(),
+        geocodeTarget.countryIso() != null ? "country=" + geocodeTarget.countryIso() : "no country bias",
+        Math.round(TRIP_ITINERARY_SEARCH_RADIUS_METERS));
 
     List<String> searchTypes = new ArrayList<>(new LinkedHashSet<>(trip.getCategories()));
     if (searchTypes.isEmpty()) {
       return;
     }
 
-    // 1. Aggregate candidates from Google API + DB
-    List<Place> candidates = placeCandidateAggregator.aggregateCandidates(
-        center.latitude(), center.longitude(), radius, searchTypes);
+    // 1. Aggregate candidates from Google API + DB (geo-filtered inside aggregator)
+    List<Place> candidates =
+        placeCandidateAggregator.aggregateCandidates(
+            centerLat, centerLng, searchRadius, searchTypes);
 
-    // 1b. Inject user-requested must-include places (bypass category filter). They join the
-    // candidate pool unconditionally; rankPlaces will boost them so the scheduler keeps them.
+    // 1b. Must-include saved places: only if within TRIP_MAX_PLACE_DISTANCE_METERS of trip center
     Set<Long> boostedIds = new HashSet<>();
     if (mustIncludePlaceIds != null && !mustIncludePlaceIds.isEmpty()) {
       Set<Long> requested = new LinkedHashSet<>();
       for (Long id : mustIncludePlaceIds) {
-        if (id != null) requested.add(id);
+        if (id != null) {
+          requested.add(id);
+        }
       }
       Set<Long> alreadyPresent = new HashSet<>();
       for (Place p : candidates) {
-        if (p.getId() != null) alreadyPresent.add(p.getId());
+        if (p.getId() != null) {
+          alreadyPresent.add(p.getId());
+        }
+      }
+      for (Long id : requested) {
+        if (alreadyPresent.contains(id)) {
+          boostedIds.add(id);
+        }
       }
       List<Long> toLoad = new ArrayList<>();
       for (Long id : requested) {
-        if (!alreadyPresent.contains(id)) toLoad.add(id);
+        if (!alreadyPresent.contains(id)) {
+          toLoad.add(id);
+        }
       }
       if (!toLoad.isEmpty()) {
         candidates = new ArrayList<>(candidates);
         for (Place p : placeRepo.findAllById(toLoad)) {
+          if (p.getLocation() == null) {
+            log.warn(
+                "Skipping must-include place id={} — no coordinates stored",
+                p.getId());
+            continue;
+          }
+          double km =
+              HaversineUtil.distanceKm(
+                  centerLat, centerLng, p.getLocation().getLat(), p.getLocation().getLng());
+          if (km * 1000 > TRIP_MAX_PLACE_DISTANCE_METERS) {
+            log.warn(
+                "Skipping must-include place id={} — {} km from trip center (max {} km)",
+                p.getId(),
+                Math.round(km),
+                Math.round(TRIP_MAX_PLACE_DISTANCE_METERS / 1000));
+            continue;
+          }
           candidates.add(p);
+          boostedIds.add(p.getId());
         }
       }
-      boostedIds.addAll(requested);
     }
 
     // 2. Score with hybrid recommender (content + SVD), boosting must-include ids
-    List<Place> rankedPlaces = placeRecommendationService.rankPlaces(
-        candidates, searchTypes, ownerUserId, null, boostedIds.isEmpty() ? null : boostedIds);
+    List<Place> rankedPlaces =
+        placeRecommendationService.rankPlaces(
+            candidates, searchTypes, ownerUserId, null, boostedIds.isEmpty() ? null : boostedIds);
+
+    rankedPlaces =
+        PlaceGeoFilter.withinRadius(
+            rankedPlaces, centerLat, centerLng, TRIP_MAX_PLACE_DISTANCE_METERS);
 
     if (rankedPlaces.isEmpty()) {
       return;
     }
 
-    // 3. Merge with existing DB records or persist new places
+    // 3. Merge with existing DB records or persist new places (always keep fresh coordinates)
     List<Place> savedPlaces = new ArrayList<>();
     for (Place place : rankedPlaces) {
-      if (place.getId() != null) {
-        // Already a persisted entity from DB aggregation
-        savedPlaces.add(place);
-      } else if (place.getGooglePlaceId() != null && !place.getGooglePlaceId().isBlank()) {
-        // Try to find existing by googlePlaceId to avoid duplicates
-        Place existing = placeRepo.findByGooglePlaceId(place.getGooglePlaceId()).orElse(null);
-        if (existing != null) {
-          savedPlaces.add(existing);
-        } else {
-          savedPlaces.add(placeRepo.save(place));
-        }
-      } else {
-        savedPlaces.add(placeRepo.save(place));
-      }
+      savedPlaces.add(resolvePersistedPlaceForItinerary(place));
+    }
+
+    savedPlaces =
+        PlaceGeoFilter.withinRadius(
+            savedPlaces, centerLat, centerLng, TRIP_MAX_PLACE_DISTANCE_METERS);
+    if (savedPlaces.isEmpty()) {
+      log.warn(
+          "No places within {}m of {} after resolving persisted records",
+          Math.round(TRIP_MAX_PLACE_DISTANCE_METERS),
+          geocodeTarget.address());
+      return;
     }
 
     // 4. Schedule using ItineraryScheduler (handles budget, time, open hours)
-    ItineraryScheduler.ScheduleResult result = itineraryScheduler.schedule(
-        trip, savedPlaces, budgetService, trip.getBudget());
+    ItineraryScheduler.ScheduleResult result =
+        itineraryScheduler.schedule(
+            trip,
+            savedPlaces,
+            budgetService,
+            trip.getBudget(),
+            centerLat,
+            centerLng,
+            TRIP_MAX_PLACE_DISTANCE_METERS);
 
     trip.getDays().addAll(result.days());
+    pruneActivitiesOutsideTripRadius(
+        trip.getDays(), centerLat, centerLng, TRIP_MAX_PLACE_DISTANCE_METERS);
 
     if (trip.getItineraryReservePlaceIds() == null) {
       trip.setItineraryReservePlaceIds(new ArrayList<>());
@@ -849,7 +1223,13 @@ public class TripServiceImpl implements TripService {
       trip.getItineraryReservePlaceIds().clear();
     }
     for (Place p : savedPlaces) {
-      if (p.getId() != null && !result.usedPlaceIds().contains(p.getId())) {
+      if (p.getId() == null || result.usedPlaceIds().contains(p.getId())) {
+        continue;
+      }
+      if (p.getLocation() != null
+          && !PlaceGeoFilter.withinRadius(
+                  List.of(p), centerLat, centerLng, TRIP_MAX_PLACE_DISTANCE_METERS)
+              .isEmpty()) {
         trip.getItineraryReservePlaceIds().add(p.getId());
       }
     }
@@ -1021,8 +1401,8 @@ public class TripServiceImpl implements TripService {
     if (trip.getCities() != null && !trip.getCities().isEmpty()) {
       List<City> cities = new ArrayList<>(trip.getCities());
       if (cities.size() == 1) {
-        LatLng c =
-            googleGeocodingService.geocodeToLatLng(buildGeocodeAddressFromCity(cities.get(0)));
+        GeocodeTarget gt = geocodeTargetFromCity(cities.get(0));
+        LatLng c = googleGeocodingService.geocodeToLatLng(gt.address(), gt.countryIso());
         return new TripSearchGeo(c, 40_000);
       }
       Set<Long> countryIds =
@@ -1036,7 +1416,8 @@ public class TripServiceImpl implements TripService {
       }
       List<LatLng> points = new ArrayList<>();
       for (City city : cities) {
-        points.add(googleGeocodingService.geocodeToLatLng(buildGeocodeAddressFromCity(city)));
+        GeocodeTarget gt = geocodeTargetFromCity(city);
+        points.add(googleGeocodingService.geocodeToLatLng(gt.address(), gt.countryIso()));
       }
       return tripSearchGeoFromLatLngPoints(points);
     }
@@ -1197,6 +1578,7 @@ public class TripServiceImpl implements TripService {
         currentPlace == null ? Set.of() : normalizedCategoriesFromPlace(currentPlace);
     Set<Long> used = collectUsedPlaceIdsExcept(trip, activity.getId());
 
+    TripPlaceSearchContext searchCtx = tripPlaceSearchContext(trip);
     List<Long> reserve = trip.getItineraryReservePlaceIds();
     if (reserve != null) {
       for (Long pid : reserve) {
@@ -1204,7 +1586,7 @@ public class TripServiceImpl implements TripService {
           continue;
         }
         Place p = placeRepo.findById(pid).orElse(null);
-        if (p == null) {
+        if (p == null || !isWithinTripSearchRadius(p, searchCtx)) {
           continue;
         }
         if (!focus.isEmpty() && matchesCategoryFocus(p, focus)) {
@@ -1216,22 +1598,23 @@ public class TripServiceImpl implements TripService {
           continue;
         }
         Optional<Place> p = placeRepo.findById(pid);
-        if (p.isPresent()) {
+        if (p.isPresent() && isWithinTripSearchRadius(p.get(), searchCtx)) {
           return p;
         }
       }
     }
 
-    String geocodeAddress = resolveGeocodeAddress(trip);
-    LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
-    double radius = 10000.0;
+    double radius = searchCtx.radiusMeters();
     List<String> searchTypes = new ArrayList<>(new LinkedHashSet<>(trip.getCategories()));
     if (searchTypes.isEmpty()) {
       return Optional.empty();
     }
     List<Place> candidates =
         placeCandidateAggregator.aggregateCandidates(
-            center.latitude(), center.longitude(), radius, searchTypes);
+            searchCtx.center().latitude(),
+            searchCtx.center().longitude(),
+            radius,
+            searchTypes);
 
     LinkedHashMap<Long, Place> byId = new LinkedHashMap<>();
     for (Place c : candidates) {
@@ -1242,12 +1625,20 @@ public class TripServiceImpl implements TripService {
     if (reserve != null) {
       for (Long pid : reserve) {
         if (pid != null && !byId.containsKey(pid)) {
-          placeRepo.findById(pid).ifPresent(p -> byId.put(p.getId(), p));
+          placeRepo
+              .findById(pid)
+              .filter(p -> isWithinTripSearchRadius(p, searchCtx))
+              .ifPresent(p -> byId.put(p.getId(), p));
         }
       }
     }
 
-    List<Place> merged = new ArrayList<>(byId.values());
+    List<Place> merged =
+        PlaceGeoFilter.withinRadius(
+            new ArrayList<>(byId.values()),
+            searchCtx.center().latitude(),
+            searchCtx.center().longitude(),
+            radius);
     List<Place> ranked =
         placeRecommendationService.rankPlaces(
             merged, searchTypes, ownerUserId, focus.isEmpty() ? null : focus);
@@ -1275,6 +1666,7 @@ public class TripServiceImpl implements TripService {
   private Optional<Place> pickAutoPlaceForTrip(Trip trip, Long ownerUserId) {
     Set<Long> used = collectUsedPlaceIdsExcept(trip, null);
 
+    TripPlaceSearchContext searchCtx = tripPlaceSearchContext(trip);
     List<Long> reserve = trip.getItineraryReservePlaceIds();
     if (reserve != null) {
       for (Long pid : reserve) {
@@ -1282,22 +1674,23 @@ public class TripServiceImpl implements TripService {
           continue;
         }
         Optional<Place> p = placeRepo.findById(pid);
-        if (p.isPresent()) {
+        if (p.isPresent() && isWithinTripSearchRadius(p.get(), searchCtx)) {
           return p;
         }
       }
     }
 
-    String geocodeAddress = resolveGeocodeAddress(trip);
-    LatLng center = googleGeocodingService.geocodeToLatLng(geocodeAddress);
-    double radius = 10000.0;
+    double radius = searchCtx.radiusMeters();
     List<String> searchTypes = new ArrayList<>(new LinkedHashSet<>(trip.getCategories()));
     if (searchTypes.isEmpty()) {
       return Optional.empty();
     }
     List<Place> candidates =
         placeCandidateAggregator.aggregateCandidates(
-            center.latitude(), center.longitude(), radius, searchTypes);
+            searchCtx.center().latitude(),
+            searchCtx.center().longitude(),
+            radius,
+            searchTypes);
 
     LinkedHashMap<Long, Place> byId = new LinkedHashMap<>();
     for (Place c : candidates) {
@@ -1308,12 +1701,20 @@ public class TripServiceImpl implements TripService {
     if (reserve != null) {
       for (Long pid : reserve) {
         if (pid != null && !byId.containsKey(pid)) {
-          placeRepo.findById(pid).ifPresent(p -> byId.put(p.getId(), p));
+          placeRepo
+              .findById(pid)
+              .filter(p -> isWithinTripSearchRadius(p, searchCtx))
+              .ifPresent(p -> byId.put(p.getId(), p));
         }
       }
     }
 
-    List<Place> merged = new ArrayList<>(byId.values());
+    List<Place> merged =
+        PlaceGeoFilter.withinRadius(
+            new ArrayList<>(byId.values()),
+            searchCtx.center().latitude(),
+            searchCtx.center().longitude(),
+            radius);
     List<Place> ranked =
         placeRecommendationService.rankPlaces(merged, searchTypes, ownerUserId, null);
 

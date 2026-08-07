@@ -24,8 +24,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Fills {@link Place#getPhotoUrl()} from Google when missing (e.g. places created before photos
- * were wired, or loaded from DB without a photo cache).
+ * Syncs {@link Place} metadata from Google: missing photos and non-English (e.g. Cyrillic) titles
+ * are refreshed using {@code languageCode=en}.
  */
 @Service
 public class PlacePhotoRefreshService {
@@ -74,7 +74,9 @@ public class PlacePhotoRefreshService {
       if (p.getGooglePlaceId() == null || p.getGooglePlaceId().isBlank()) {
         continue;
       }
-      if (p.getPhotoUrl() != null && !p.getPhotoUrl().isBlank()) {
+      boolean missingPhoto = p.getPhotoUrl() == null || p.getPhotoUrl().isBlank();
+      boolean needsEnglishTitle = PlaceDisplaySync.titleNeedsEnglishRefresh(p.getTitle());
+      if (!missingPhoto && !needsEnglishTitle) {
         continue;
       }
       needs.add(p);
@@ -84,7 +86,7 @@ public class PlacePhotoRefreshService {
     }
 
     Semaphore semaphore = new Semaphore(detailConcurrency);
-    List<CompletableFuture<Map.Entry<Long, String>>> futures =
+    List<CompletableFuture<RefreshedPlaceFields>> futures =
         needs.stream()
             .map(
                 p ->
@@ -97,9 +99,17 @@ public class PlacePhotoRefreshService {
                                   .findById(p.getId())
                                   .map(
                                       managed -> {
-                                        if (managed.getPhotoUrl() != null
-                                            && !managed.getPhotoUrl().isBlank()) {
+                                        boolean missingPhoto =
+                                            managed.getPhotoUrl() == null
+                                                || managed.getPhotoUrl().isBlank();
+                                        boolean needsEnglishTitle =
+                                            PlaceDisplaySync.titleNeedsEnglishRefresh(
+                                                managed.getTitle());
+                                        if (!missingPhoto && !needsEnglishTitle) {
                                           p.setPhotoUrl(managed.getPhotoUrl());
+                                          if (managed.getTitle() != null) {
+                                            p.setTitle(managed.getTitle());
+                                          }
                                           return null;
                                         }
                                         if (managed.getGooglePlaceId() == null
@@ -110,14 +120,26 @@ public class PlacePhotoRefreshService {
                                           GooglePlaceDto dto =
                                               googlePlaceClient.getPlaceDetails(
                                                   managed.getGooglePlaceId());
+                                          PlaceDisplaySync.applyFreshDisplay(managed, dto);
+                                          PlaceCoordinateSync.applyFreshLocation(managed, dto);
+                                          if (managed.getTitle() != null) {
+                                            p.setTitle(managed.getTitle());
+                                          }
+                                          if (managed.getLocation() != null) {
+                                            p.setLocation(managed.getLocation());
+                                          }
                                           String url = photoMediaUrlBuilder.firstPhotoMediaUrl(dto);
                                           if (url != null) {
                                             p.setPhotoUrl(url);
-                                            return Map.entry(managed.getId(), url);
                                           }
+                                          return new RefreshedPlaceFields(
+                                              managed.getId(),
+                                              missingPhoto ? url : null,
+                                              needsEnglishTitle ? managed.getTitle() : null,
+                                              needsEnglishTitle ? managed.getAddress() : null);
                                         } catch (Exception e) {
                                           log.warn(
-                                              "Photo refresh failed for place {}: {}",
+                                              "Place metadata refresh failed for place {}: {}",
                                               managed.getId(),
                                               e.getMessage());
                                         }
@@ -138,26 +160,37 @@ public class PlacePhotoRefreshService {
 
     CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
-    Map<Long, String> toPersist = new LinkedHashMap<>();
-    for (CompletableFuture<Map.Entry<Long, String>> f : futures) {
-      Map.Entry<Long, String> e = f.join();
-      if (e != null && e.getKey() != null && e.getValue() != null) {
-        toPersist.put(e.getKey(), e.getValue());
+    Map<Long, RefreshedPlaceFields> toPersist = new LinkedHashMap<>();
+    for (CompletableFuture<RefreshedPlaceFields> f : futures) {
+      RefreshedPlaceFields e = f.join();
+      if (e != null && e.placeId() != null) {
+        toPersist.put(e.placeId(), e);
       }
     }
     if (!toPersist.isEmpty()) {
       transactionTemplate.executeWithoutResult(
           status -> {
-            for (Map.Entry<Long, String> e : toPersist.entrySet()) {
+            for (RefreshedPlaceFields e : toPersist.values()) {
               placeRepo
-                  .findById(e.getKey())
+                  .findById(e.placeId())
                   .ifPresent(
                       managed -> {
-                        managed.setPhotoUrl(e.getValue());
+                        if (e.photoUrl() != null && !e.photoUrl().isBlank()) {
+                          managed.setPhotoUrl(e.photoUrl());
+                        }
+                        if (e.title() != null && !e.title().isBlank()) {
+                          managed.setTitle(e.title());
+                        }
+                        if (e.address() != null && !e.address().isBlank()) {
+                          managed.setAddress(e.address());
+                        }
                         placeRepo.save(managed);
                       });
             }
           });
     }
   }
+
+  private record RefreshedPlaceFields(
+      Long placeId, String photoUrl, String title, String address) {}
 }

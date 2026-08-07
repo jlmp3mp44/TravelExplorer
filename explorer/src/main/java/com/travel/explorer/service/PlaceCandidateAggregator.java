@@ -3,6 +3,7 @@ package com.travel.explorer.service;
 import com.travel.explorer.entities.Place;
 import com.travel.explorer.google.GooglePlaceService;
 import com.travel.explorer.repo.PlaceRepo;
+import com.travel.explorer.service.scheduling.PlaceGeoFilter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -44,7 +45,8 @@ public class PlaceCandidateAggregator {
         lat - deltaLat, lat + deltaLat,
         lng - deltaLng, lng + deltaLng);
 
-    return merge(googlePlaces, dbPlaces);
+    List<Place> merged = merge(googlePlaces, dbPlaces);
+    return PlaceGeoFilter.withinRadius(merged, lat, lng, radius);
   }
 
   private List<Place> merge(List<Place> googlePlaces, List<Place> dbPlaces) {
