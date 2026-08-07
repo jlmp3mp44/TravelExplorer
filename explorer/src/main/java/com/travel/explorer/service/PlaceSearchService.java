@@ -45,6 +45,7 @@ public class PlaceSearchService {
     }
 
     String address;
+    String countryIso = null;
     int radius;
     if (request.getCityId() != null) {
       City city =
@@ -53,6 +54,9 @@ public class PlaceSearchService {
               .orElseThrow(
                   () -> new ResourceNotFoundException("City", "cityId", request.getCityId()));
       address = buildAddressFromCity(city);
+      if (city.getCountry() != null) {
+        countryIso = city.getCountry().getIso();
+      }
       radius = CITY_RADIUS_METERS;
     } else {
       Country country =
@@ -63,13 +67,14 @@ public class PlaceSearchService {
                       new ResourceNotFoundException(
                           "Country", "countryId", request.getCountryId()));
       address = country.getName() != null ? country.getName().trim() : "";
+      countryIso = country.getIso();
       radius = COUNTRY_RADIUS_METERS;
     }
     if (address.isBlank()) {
       throw new APIException("Could not resolve search location");
     }
 
-    LatLng center = googleGeocodingService.geocodeToLatLng(address);
+    LatLng center = googleGeocodingService.geocodeToLatLng(address, countryIso);
     List<Place> found =
         googlePlaceService.searchByFreeText(
             request.getQuery().trim(), center.latitude(), center.longitude(), radius);

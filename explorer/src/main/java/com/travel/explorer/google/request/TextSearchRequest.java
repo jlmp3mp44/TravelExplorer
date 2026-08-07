@@ -14,6 +14,7 @@ public record TextSearchRequest(
     String textQuery,
     String includedType,
     LocationBias locationBias,
+    LocationRestriction locationRestriction,
     String languageCode,
     int pageSize,
     String pageToken,

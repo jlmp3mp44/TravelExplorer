@@ -1,6 +1,5 @@
 package com.travel.explorer.entities;
 
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -10,7 +9,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -50,12 +48,6 @@ public class Activity {
   @Column(name = "user_added", nullable = false)
   @ColumnDefault("false")
   private Boolean userAdded = false;
-
-  @OneToMany(mappedBy = "activity",
-      cascade = CascadeType.ALL,
-      orphanRemoval = true)
-  private List<ActivityRating
-      > ratings = new ArrayList<>();
 
   private LocalDateTime startTime;
   private LocalDateTime endTime;

@@ -19,9 +19,13 @@ public class GoogleGeocodingService {
   }
 
   public LatLng geocodeToLatLng(String address) {
+    return geocodeToLatLng(address, null);
+  }
+
+  public LatLng geocodeToLatLng(String address, String countryIso) {
     GeocodeResponse response;
     try {
-      response = client.geocode(address);
+      response = client.geocode(address, countryIso);
     } catch (RestClientException e) {
       log.warn("Geocoding request failed for '{}'", address, e);
       throw new APIException("Could not resolve destination: " + e.getMessage());

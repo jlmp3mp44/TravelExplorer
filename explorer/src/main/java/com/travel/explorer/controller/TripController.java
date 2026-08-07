@@ -42,6 +42,7 @@ public class TripController {
   @Autowired
   RatingService ratingService;
 
+  /** Discover and Best trips: list/catalog (requires authenticated user via {@link SecurityConfig}). */
   @GetMapping()
   public ResponseEntity<TripListResponce> getAllTrips(
       @RequestParam(name = "sortBy", defaultValue = AppConstants.SORT_TRIPS_BY, required = false) String sortBy,

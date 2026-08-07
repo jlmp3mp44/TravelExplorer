@@ -23,7 +23,7 @@ public class CollaborativeFilteringClient {
 
     public CollaborativeFilteringClient(
             RestTemplateBuilder builder,
-            @Value("${recommender.service.url:http://localhost:8001}") String baseUrl) {
+            @Value("${recommendation.service.url:http://recommendation-service:8001}") String baseUrl) {
         this.restTemplate = builder.build();
         this.baseUrl = baseUrl;
     }
