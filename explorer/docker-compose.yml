@@ -27,6 +27,19 @@ services:
       - db
     networks:
       - explorer-net
+  frontend:
+    build:
+      context: D:/4th course/diploma/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_GOOGLE_MAPS_API_KEY: ${VITE_GOOGLE_MAPS_API_KEY:-}
+    image: explorer-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - explorer-net
 networks:
   explorer-net:
     driver: bridge
