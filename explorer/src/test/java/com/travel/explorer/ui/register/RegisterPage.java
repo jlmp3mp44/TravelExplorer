@@ -13,6 +13,7 @@ public class RegisterPage {
   private final Locator passwordInput;
   private final Locator confirmPasswordInput;
   private final Locator createAccountButton;
+  private final Locator errorMessage;
 
   public RegisterPage(Page page) {
     this.page = page;
@@ -22,22 +23,29 @@ public class RegisterPage {
     this.passwordInput = page.getByLabel("Password", new Page.GetByLabelOptions().setExact(true));
     this.confirmPasswordInput = page.getByLabel("Confirm password", new Page.GetByLabelOptions().setExact(true));
     this.createAccountButton = page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Create account"));
+    this.errorMessage =  page.getByRole(AriaRole.ALERT);
   }
 
   public void navigate() {
     page.navigate("http://localhost:3000/register");
   }
 
-  public void registerUser(String username, String email, String phone, String password) {
+  public void registerUser(String username, String email, String phone, String password, String confirmPassword) {
     usernameInput.fill(username);
     emailInput.fill(email);
     phoneInput.fill(phone);
     passwordInput.fill(password);
-    confirmPasswordInput.fill(password);
+    confirmPasswordInput.fill(confirmPassword);
     createAccountButton.click();
   }
 
   public void waitRedirectToLogin(){
     page.waitForURL("**/login", new Page.WaitForURLOptions().setTimeout(15000));
   }
+
+  public Locator getErrorMessage(){
+      return errorMessage;
+  }
+
+
 }
