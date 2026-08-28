@@ -1,6 +1,7 @@
 package com.travel.explorer.ui.register;
 
 import com.travel.explorer.ui.BaseTest;
+import com.travel.explorer.ui.ExistingUser;
 import com.travel.explorer.ui.register.RegisterPage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,35 +13,47 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 
 public class RegisterTest extends BaseTest {
 
+  RegisterExpectedData expectedData =  new RegisterExpectedData();
+
   @Test
   void shouldRegisterSuccessfully() {
     RegisterPage registerPage = new RegisterPage(page);
 
-    String uniqueEmail = "user_" + UUID.randomUUID().toString().substring(0, 8) + "@test.com";
 
     registerPage.navigate();
-    String uniqueId = String.valueOf(System.currentTimeMillis());
-    registerPage.registerUser("TestUser" + uniqueId, uniqueEmail, "+380670000000", "SecurePass123!", "SecurePass123!");
+    registerPage.registerUser("Test123", "Test123@test.com", "+380670000000", "SecurePass123!", "SecurePass123!");
 
     registerPage.waitRedirectToLogin();
     assertThat(page).hasURL("http://localhost:3000/login");
   }
 
-
-  @Test
-  void registrationExistingEmail() {
+  @ParameterizedTest(name = "{index} - {0}")
+  @MethodSource(
+      "com.travel.explorer.ui.register.RegisterDataProvider#existingRegistrationData"
+  )
+  void registrationExistingData(
+      String testName,
+      String username,
+      String email,
+      String phone,
+      String password,
+      String confirmPassword,
+      String expectedError
+  ) {
     RegisterPage registerPage = new RegisterPage(page);
-    String existingEmail = "user_" + UUID.randomUUID().toString().substring(0, 8) + "@test.com";
-    String uniqueId = String.valueOf(System.currentTimeMillis());
 
     registerPage.navigate();
-    registerPage.registerUser("TestUser1" + uniqueId, existingEmail, "+380670000000", "SecurePass123!", "SecurePass123!");
-    registerPage.waitRedirectToLogin();
 
-    registerPage.navigate();
-    registerPage.registerUser("TestUser2" + uniqueId, existingEmail, "+380670000001", "SecurePass123!", "SecurePass123!");
+    registerPage.registerUser(
+        username,
+        email,
+        phone,
+        password,
+        confirmPassword
+    );
 
-    assertThat(registerPage.getErrorMessage()).hasText("Email already taken!");
+    assertThat(registerPage.getErrorMessage())
+        .hasText(expectedError);
   }
 
   @ParameterizedTest(name = "{index} - {0}")
