@@ -1,11 +1,7 @@
 package com.travel.explorer.ui.register;
 
 import com.travel.explorer.ui.BaseTest;
-import com.travel.explorer.ui.ExistingUser;
-import com.travel.explorer.ui.register.RegisterPage;
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import java.util.UUID;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
