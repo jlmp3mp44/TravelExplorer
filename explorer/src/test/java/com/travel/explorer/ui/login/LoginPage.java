@@ -16,7 +16,7 @@ public class LoginPage {
     this.page = page;
     this.usernameInput = page.getByLabel("Username");
     this.passwordInput = page.getByLabel("Password", new Page.GetByLabelOptions().setExact(true));
-    this.loginButton = page.getByRole(AriaRole.BUTTON, new Page.GetByRoleOptions().setName("Sign in").setExact(true));
+    this.loginButton = page.locator("button[type='submit']");
     this.errorMessage =  page.getByRole(AriaRole.ALERT);
   }
 
