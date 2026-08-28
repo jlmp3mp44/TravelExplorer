@@ -5,6 +5,7 @@ import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertTha
 import com.travel.explorer.ui.BaseTest;
 import com.travel.explorer.ui.ExistingUser;
 import com.travel.explorer.ui.register.RegisterPage;
+import lombok.extern.java.Log;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,6 +25,22 @@ public class LoginTest extends BaseTest {
 
     loginPage.waitRedirectToMainPage();
     assertThat(page).hasURL("http://localhost:3000/");
+  }
+
+  @ParameterizedTest(name = "{index} - {0}")
+  @MethodSource("com.travel.explorer.ui.login.LoginDataProvider#incorrectLoginData")
+  void loginIncorrectInputData(
+      String testName,
+      String usernameOrEmail,
+      String password,
+      String expectedError
+  ) {
+    LoginPage loginPage = new LoginPage(page);
+
+    loginPage.navigate();
+    loginPage.loginUser(usernameOrEmail, password);
+
+    assertThat(loginPage.getErrorMessage()).hasText(expectedError);
   }
 
 }
