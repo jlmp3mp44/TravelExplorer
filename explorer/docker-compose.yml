@@ -1,11 +1,13 @@
 services:
   db:
-    image: postgres:alpine
+    image: postgres:17-alpine
     ports:
-      - "5432:5432"
+      - "5433:5432"
     environment:
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: explorer
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - explorer-net
   backend:
@@ -43,3 +45,5 @@ services:
 networks:
   explorer-net:
     driver: bridge
+volumes:
+  postgres_data:

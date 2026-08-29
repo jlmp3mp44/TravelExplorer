@@ -3,11 +3,7 @@ package com.travel.explorer.ui.login;
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 
 import com.travel.explorer.ui.BaseTest;
-import com.travel.explorer.ui.ExistingUser;
-import com.travel.explorer.ui.register.RegisterPage;
-import lombok.extern.java.Log;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
