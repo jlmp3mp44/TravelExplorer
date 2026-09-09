@@ -19,7 +19,7 @@ Travel Explorer aims to simplify discovering places and planning trips by bringi
 - User registration, sign-in, and sign-out with JWT authentication using cookies.
 - Trip creation and editing with daily activity schedules.
 - Place search through Google Places, photo retrieval, and geocoding.
-- Personalized recommendations combining interest matching and SVD-based collaborative filtering, with default weights of 0.6 and 0.4 respectively.
+- Personalized recommendations combining interest matching and SVD-based collaborative filtering
 - Saved places, activity additions and replacements, and activity reordering.
 - Trip and activity ratings, and a browsable trip catalog.
 - Trip export to PDF.
