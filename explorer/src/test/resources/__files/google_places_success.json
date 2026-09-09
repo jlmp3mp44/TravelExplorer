@@ -1,0 +1,17 @@
+{
+  "places": [
+    {
+      "id": "test-museum-1",
+      "displayName": { "text": "Test Museum" },
+      "formattedAddress": "Kyiv, Ukraine",
+      "location": { "latitude": 50.4501, "longitude": 30.5234 },
+      "types": ["museum", "tourist_attraction", "point_of_interest", "establishment"],
+      "primaryType": "museum",
+      "rating": 4.5,
+      "userRatingCount": 120,
+      "businessStatus": "OPERATIONAL",
+      "priceLevel": "PRICE_LEVEL_INEXPENSIVE",
+      "photos": []
+    }
+  ]
+}

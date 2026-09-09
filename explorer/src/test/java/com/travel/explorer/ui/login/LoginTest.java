@@ -3,6 +3,7 @@ package com.travel.explorer.ui.login;
 import static com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat;
 
 import com.travel.explorer.ui.BaseTest;
+import com.travel.explorer.config.TestConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -20,7 +21,7 @@ public class LoginTest extends BaseTest {
     loginPage.loginUser(usernameOrEmail, password);
 
     loginPage.waitRedirectToMainPage();
-    assertThat(page).hasURL("http://localhost:3000/");
+    assertThat(page).hasURL(TestConfig.getBaseUrl() + "/");
   }
 
   @ParameterizedTest(name = "{index} - {0}")

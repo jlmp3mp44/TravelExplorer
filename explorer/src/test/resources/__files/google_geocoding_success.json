@@ -1,0 +1,9 @@
+{
+  "status": "OK",
+  "results": [
+    {
+      "formatted_address": "Ukraine",
+      "geometry": { "location": { "lat": 50.4501, "lng": 30.5234 } }
+    }
+  ]
+}

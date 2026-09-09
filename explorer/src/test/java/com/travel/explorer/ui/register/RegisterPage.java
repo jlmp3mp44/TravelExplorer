@@ -1,6 +1,7 @@
 package com.travel.explorer.ui.register;
 
 import com.microsoft.playwright.Locator;
+import com.travel.explorer.config.TestConfig;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.AriaRole;
 
@@ -27,7 +28,7 @@ public class RegisterPage {
   }
 
   public void navigate() {
-    page.navigate("http://localhost:3000/register");
+    page.navigate(TestConfig.getBaseUrl() + "/register");
   }
 
   public void registerUser(String username, String email, String phone, String password, String confirmPassword) {

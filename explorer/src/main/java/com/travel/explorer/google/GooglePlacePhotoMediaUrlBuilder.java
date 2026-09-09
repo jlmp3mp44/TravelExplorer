@@ -12,12 +12,15 @@ import org.springframework.web.util.UriComponentsBuilder;
 public class GooglePlacePhotoMediaUrlBuilder {
 
   private final String apiKey;
+  private final String baseUrl;
   private final int maxHeightPx;
 
   public GooglePlacePhotoMediaUrlBuilder(
       @Value("${google.api.key}") String apiKey,
+      @Value("${google.places.base-url}") String baseUrl,
       @Value("${google.place-photo.max-height-px:800}") int maxHeightPx) {
     this.apiKey = apiKey;
+    this.baseUrl = baseUrl.replaceAll("/+$", "");
     this.maxHeightPx = maxHeightPx;
   }
 
@@ -30,7 +33,7 @@ public class GooglePlacePhotoMediaUrlBuilder {
       return null;
     }
     return UriComponentsBuilder.fromUriString(
-            "https://places.googleapis.com/v1/" + photoResourceName + "/media")
+            baseUrl + "/v1/" + photoResourceName + "/media")
         .queryParam("maxHeightPx", maxHeightPx)
         .queryParam("key", apiKey)
         .build()

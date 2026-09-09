@@ -25,6 +25,11 @@ public class TestConfig {
   }
 
   public static String getBaseUrl() {
-    return properties.getProperty("base.url");
+    return System.getProperty("base.url", properties.getProperty("base.url"));
+  }
+
+  public static boolean isHeadless() {
+    return Boolean.parseBoolean(
+        System.getProperty("browser.headless", properties.getProperty("browser.headless", "false")));
   }
 }

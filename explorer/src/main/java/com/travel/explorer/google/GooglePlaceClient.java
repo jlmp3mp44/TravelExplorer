@@ -15,13 +15,8 @@ import org.springframework.web.util.UriComponentsBuilder;
 public class GooglePlaceClient {
 
   private final String apiKey;
+  private final String baseUrl;
   private final RestTemplate restTemplate;
-
-  private static final String TEXT_SEARCH_URL =
-      "https://places.googleapis.com/v1/places:searchText";
-
-  private static final String PLACE_DETAILS_URL =
-      "https://places.googleapis.com/v1/places/";
 
   /** Cheapest SKU ($0.30/1K) — only retrieves place IDs. */
   private static final String ID_ONLY_FIELD_MASK = "places.id,nextPageToken";
@@ -37,8 +32,12 @@ public class GooglePlaceClient {
       "id,displayName,formattedAddress,types,location,"
           + "primaryType,rating,userRatingCount,businessStatus,priceLevel,photos";
 
-  public GooglePlaceClient(@Value("${google.api.key}") String apiKey, RestTemplateBuilder builder) {
+  public GooglePlaceClient(
+      @Value("${google.api.key}") String apiKey,
+      @Value("${google.places.base-url}") String baseUrl,
+      RestTemplateBuilder builder) {
     this.apiKey = apiKey;
+    this.baseUrl = baseUrl.replaceAll("/+$", "");
     this.restTemplate = builder.build();
   }
 
@@ -73,7 +72,7 @@ public class GooglePlaceClient {
     HttpEntity<Void> entity = new HttpEntity<>(headers);
 
     var uri =
-        UriComponentsBuilder.fromUriString(PLACE_DETAILS_URL + placeId)
+        UriComponentsBuilder.fromUriString(baseUrl + "/v1/places/" + placeId)
             .queryParam("languageCode", languageCode)
             .build()
             .encode()
@@ -99,7 +98,7 @@ public class GooglePlaceClient {
     HttpEntity<SearchNearbyRequest> entity = new HttpEntity<>(requestBody, headers);
 
     ResponseEntity<GooglePlacesResponse> response = restTemplate.exchange(
-        "https://places.googleapis.com/v1/places:searchNearby",
+        baseUrl + "/v1/places:searchNearby",
         HttpMethod.POST,
         entity,
         GooglePlacesResponse.class
@@ -116,7 +115,7 @@ public class GooglePlaceClient {
     HttpEntity<TextSearchRequest> entity = new HttpEntity<>(requestBody, headers);
 
     ResponseEntity<GooglePlacesResponse> response = restTemplate.exchange(
-        TEXT_SEARCH_URL,
+        baseUrl + "/v1/places:searchText",
         HttpMethod.POST,
         entity,
         GooglePlacesResponse.class

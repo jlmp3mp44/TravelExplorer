@@ -1,6 +1,7 @@
 package com.travel.explorer.ui.login;
 
 import com.microsoft.playwright.Locator;
+import com.travel.explorer.config.TestConfig;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.options.AriaRole;
 
@@ -21,7 +22,7 @@ public class LoginPage {
   }
 
   public void navigate() {
-    page.navigate("http://localhost:3000/login");
+    page.navigate(TestConfig.getBaseUrl() + "/login");
   }
 
   public void loginUser(String username, String password) {
@@ -31,7 +32,7 @@ public class LoginPage {
   }
 
   public void waitRedirectToMainPage(){
-    page.waitForURL("http://localhost:3000/", new Page.WaitForURLOptions().setTimeout(15000));
+    page.waitForURL(TestConfig.getBaseUrl() + "/", new Page.WaitForURLOptions().setTimeout(15000));
   }
 
   public Locator getErrorMessage(){

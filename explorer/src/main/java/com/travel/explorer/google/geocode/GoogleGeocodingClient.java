@@ -9,15 +9,16 @@ import org.springframework.web.util.UriComponentsBuilder;
 @Component
 public class GoogleGeocodingClient {
 
-  private static final String BASE_URL = "https://maps.googleapis.com/maps/api/geocode/json";
-
   private final String apiKey;
+  private final String baseUrl;
   private final RestTemplate restTemplate;
 
   public GoogleGeocodingClient(
       @Value("${google.api.key}") String apiKey,
+      @Value("${google.geocoding.base-url}") String baseUrl,
       RestTemplateBuilder builder) {
     this.apiKey = apiKey;
+    this.baseUrl = baseUrl.replaceAll("/+$", "");
     this.restTemplate = builder.build();
   }
 
@@ -30,7 +31,7 @@ public class GoogleGeocodingClient {
    */
   public GeocodeResponse geocode(String address, String countryIso) {
     var builder =
-        UriComponentsBuilder.fromUriString(BASE_URL)
+        UriComponentsBuilder.fromUriString(baseUrl + "/maps/api/geocode/json")
             .queryParam("address", address)
             .queryParam("key", apiKey);
     if (countryIso != null && !countryIso.isBlank()) {

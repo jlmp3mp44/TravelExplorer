@@ -1,0 +1,87 @@
+name: explorer-test
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: explorer_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: test-password
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d explorer_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  backend:
+    image: explorerapi-test
+    build:
+      context: .
+      dockerfile: docker/test/backend.Dockerfile
+    ports:
+      - "127.0.0.1:8081:8080"
+    environment:
+      SPRING_PROFILES_INCLUDE: ""
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/explorer_test
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: test-password
+      SPRING_APP_JWTSECRET: dGVzdC1vbmx5LWtleS1mb3ItZXhwbG9yZXItMzItYnl0ZXM=
+      SPRING_APP_JWTCOOKIENAME: explorer-test-jwt
+      GOOGLE_API_KEY: test-api-key
+      GOOGLE_PLACES_BASE_URL: http://host.docker.internal:8089
+      GOOGLE_GEOCODING_BASE_URL: http://host.docker.internal:8089
+      SPRING_HTTP_CLIENT_FACTORY: simple
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:3001
+      SPRING_SQL_INIT_MODE: always
+      SPRING_JPA_DEFER_DATASOURCE_INITIALIZATION: "true"
+      SPRING_SQL_INIT_DATA_LOCATIONS: file:/test-data/seed.sql
+      RECOMMENDATION_SERVICE_URL: http://recommendation-service:8001
+      LOGGING_LEVEL_ORG_HIBERNATE_SQL: INFO
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY: INFO
+    volumes:
+      - ./docker/test/seed.sql:/test-data/seed.sql:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/api/public/countries"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+
+  recommendation-service:
+    image: explorer-recommendation-test
+    build:
+      context: ../travel-recommender-service
+    environment:
+      RECOMMENDER_DB_HOST: db
+      RECOMMENDER_DB_NAME: explorer_test
+      RECOMMENDER_DB_USER: postgres
+      RECOMMENDER_DB_PASSWORD: test-password
+      SVD_AUTO_RETRAIN_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: explorer-frontend-test
+    build:
+      context: .
+      dockerfile: docker/test/frontend.Dockerfile
+      additional_contexts:
+        frontend_src: ${TEST_FRONTEND_PATH:-D:/4th course/diploma/frontend}
+    ports:
+      - "127.0.0.1:3001:80"
+    volumes:
+      - ./docker/test/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  test_postgres_data:

@@ -1,6 +1,7 @@
 package com.travel.explorer.ui.register;
 
 import com.travel.explorer.ui.BaseTest;
+import com.travel.explorer.config.TestConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -20,7 +21,7 @@ public class RegisterTest extends BaseTest {
     registerPage.registerUser("Test123", "Test123@test.com", "+380670000000", "SecurePass123!", "SecurePass123!");
 
     registerPage.waitRedirectToLogin();
-    assertThat(page).hasURL("http://localhost:3000/login");
+    assertThat(page).hasURL(TestConfig.getBaseUrl() + "/login");
   }
 
   @ParameterizedTest(name = "{index} - {0}")
