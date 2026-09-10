@@ -87,6 +87,10 @@ public class TripPage extends BasePage {
     return stepTitle;
   }
 
+  public Locator getErrorMessage() {
+    return page.locator("form p.error");
+  }
+
   public Locator getCreateTripButton() {
     return createTripButton;
   }
