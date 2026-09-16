@@ -38,6 +38,6 @@ build/
 ### VS Code ###
 .vscode/
 
-src/main/resources/application-secrets.properties
+explorer/src/main/resources/application-secrets.properties
 .mvn/
 
