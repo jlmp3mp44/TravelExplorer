@@ -1,6 +1,0 @@
-**
-!pom.xml
-!src
-!src/main
-!src/main/**
-**/application-secrets.properties
