@@ -24,6 +24,7 @@ target/
 
 out/
 out/*
+.env
 
 ### NetBeans ###
 /nbproject/private/
