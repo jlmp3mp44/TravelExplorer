@@ -1,0 +1,6 @@
+.git
+.idea
+.env
+.env.*
+target
+src/main/resources/application-secrets*.properties
